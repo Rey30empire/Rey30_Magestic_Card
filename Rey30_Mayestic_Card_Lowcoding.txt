@@ -1,0 +1,541 @@
+🜂 PROYECTO: REY30_CARD_MAYESTID
+🎯 VISIÓN CENTRAL
+
+Juego de cartas competitivo + editor 3D modular + AI nativa cognitiva + marketplace + motor visual AAA.
+
+Prioridad absoluta:
+
+✨ Estética extrema, fluidez, animaciones premium, experiencia cinematográfica.
+
+🧱 STACK TECNOLÓGICO DEFINITIVO
+🎮 MOTOR PRINCIPAL
+🥇 Unity 2023 LTS
+
+Lenguaje:
+
+C#
+
+Render:
+
+URP (Universal Render Pipeline)
+
+Animaciones:
+
+DOTween
+
+Animator Controller
+
+Cinemachine
+
+Shader Graph
+
+VFX Graph
+
+Exportación:
+
+Windows Desktop
+
+Android
+
+WebGL
+
+🌐 BACKEND
+
+Node.js (TypeScript)
+
+Express
+
+WebSocket (Socket.io)
+
+SQLite (MVP)
+
+PostgreSQL (Escalable)
+
+Redis (Matchmaking y ranking)
+
+JWT Auth
+
+🤖 CAPA AI
+Arquitectura:
+
+AI Orchestrator
+↓
+Gateway
+↓
+Skill Engine
+↓
+Model Providers
+
+Model Providers:
+
+Local:
+
+Ollama
+
+llama.cpp
+
+Remoto:
+
+OpenAI
+
+Anthropic
+
+Stability
+
+APIs de imagen
+
+APIs de video
+
+APIs 3D
+
+Configurables por usuario.
+
+🎨 SISTEMA VISUAL (OBLIGATORIO)
+
+Tema base recomendado:
+
+👑 Imperial Oscuro Dorado
+
+Paleta:
+
+Negro profundo #0A0A0F
+
+Dorado metálico
+
+Rojo rubí oscuro
+
+Holografía púrpura en rarezas
+
+UI:
+
+Glassmorphism
+
+Glow dinámico
+
+Transiciones suaves
+
+Partículas ambientales
+
+Sombras volumétricas
+
+Cartas:
+
+Marco dinámico shader
+
+Rareza animada
+
+Firma R33 en reverso (textura fija con hash único)
+
+🃏 SISTEMA DE CARTAS
+Estructura Interna
+
+Cada carta tiene:
+
+ID único
+
+Hash criptográfico
+
+Firma R33 (si es original)
+
+Rareza
+
+Clase
+
+Habilidades
+
+Animaciones
+
+Modelo 3D asociado
+
+Coste de invocación
+
+Energía
+
+Formato:
+JSON validado por backend.
+
+🛠 EDITOR DE CARTAS (MODULAR INTELIGENTE)
+
+NO Blender completo.
+
+Sí:
+
+Editor por Componentes
+
+Panel Izquierdo:
+
+Marcos
+
+Núcleos
+
+Fondos
+
+Cristales
+
+Partículas
+
+Iconos
+
+Tipografías
+
+Panel Central:
+
+Viewport 3D
+
+Rotar
+
+Escalar
+
+Snap
+
+Sculpt básico
+
+Boolean simple
+
+Panel Derecho:
+
+Stats
+
+Habilidades
+
+Rareza
+
+Coste
+
+Validación AI
+
+AI EN EDITOR
+
+Si humano puede:
+
+Crear carta
+
+Modificar stats
+
+Añadir efecto
+
+Animar
+
+AI también puede hacerlo.
+
+Pero siempre pasa por:
+
+Validator Engine:
+
+Balance check
+
+Anti abuso
+
+Consistencia lógica
+
+Rareza proporcional
+
+⚔️ SISTEMA DE DUELOS
+Modos:
+
+AI vs Usuario
+
+Novato
+
+Guerrero
+
+Dragón
+
+Maestra (casi imposible)
+
+Usuario vs Usuario
+
+Casual
+
+Ranked
+
+Apuesta carta rara
+
+Equipo 2v2
+
+🔁 MATCHMAKING MULTIPLATAFORMA
+
+Reglas:
+
+📱 Usuario móvil:
+
+Puede elegir:
+
+Solo móvil
+
+Móvil + PC
+
+💻 Usuario PC:
+
+Solo PC (por defecto, sin opción)
+
+Servidor valida compatibilidad antes de emparejar.
+
+Matchmaking usa:
+
+Redis
+
+ELO ranking
+
+Latencia
+
+Nivel
+
+🏪 REYSTORAGE
+
+Marketplace interno.
+
+Tipos:
+
+Mazos originales firmados
+
+Cartas individuales
+
+Gratis
+
+Premium
+
+Al comprar:
+
+Se genera licencia
+
+Se envía a inventario
+
+Se guarda local cifrado
+
+Se sincroniza nube opcional
+
+🎯 SISTEMA DE PUNTOS CREATIVOS
+
+Cada usuario inicia con:
+
+Créditos equivalentes a 5–10 cartas
+
+Editor consume:
+
+Puntos creativos
+
+Se ganan:
+
+Duelos
+
+Ranking
+
+Eventos
+
+Desbloqueos:
+
+Herramientas avanzadas
+
+Rarezas superiores
+
+Efectos especiales
+
+🧠 SISTEMA DE RAREZA INTERNA (SIN NFT)
+
+Cada carta:
+
+Hash SHA256
+
+Certificado interno
+
+Rareza matemática real
+
+Registro en servidor
+
+No blockchain.
+Más rápido.
+Más controlado.
+
+💬 CHAT SYSTEM
+
+Global
+
+Grupo
+
+Amigos
+
+Invitación a duelo directa
+
+Moderación AI automática.
+
+🖥 TERMINAL SEGURA
+
+NO terminal real directa.
+
+Sistema:
+
+Comando → Sandbox → Validación → Ejecución
+
+Permite:
+
+Instalar modelo Ollama
+
+Activar API
+
+Descargar dependencias
+
+Nunca ejecuta comandos sin validar.
+
+⚙️ AI CONFIG PANEL
+
+Sección Configuración:
+
+Submenús:
+
+API Text
+
+API Imagen
+
+API Video
+
+API 3D
+
+Ollama Config
+
+llama.cpp Config
+
+Local Model Manager
+
+Multimodal Router
+
+Usuario agrega:
+
+URL
+
+API Key
+
+Modelo
+
+Tipo
+
+AI Orchestrator decide qué modelo usar según tarea.
+
+🔐 SEGURIDAD
+
+JWT Auth
+
+Validación servidor siempre
+
+Anti cheat
+
+Motor reglas determinístico
+
+Logs de auditoría
+
+Permisos por rol
+
+🧩 IMPORTACIÓN EXTERNA
+
+Botón:
+ImportMasoConfig
+
+Permite:
+
+Cargar GLTF
+
+Cargar animaciones
+
+Validar peso
+
+Reasignar materiales
+
+Integrar en sistema cartas
+
+🧱 ARQUITECTURA GENERAL
+
+Cliente Unity
+↓
+API Gateway
+↓
+Game Engine Server
+↓
+Database
+↓
+AI Orchestrator
+↓
+Model Providers
+
+📦 ESTRUCTURA DE CARPETAS (Unity)
+
+Assets/
+
+Scripts/
+
+UI/
+
+Shaders/
+
+Prefabs/
+
+Animations/
+
+Cards/
+
+Editor/
+
+AI/
+
+Networking/
+
+🚀 FASES DE CONSTRUCCIÓN
+Fase 1
+
+Motor cartas
+
+Visual premium
+
+Inventario
+
+Duelos vs AI
+
+Editor modular básico
+
+Fase 2
+
+Multiplayer
+
+Ranking
+
+Reystorage
+
+Fase 3
+
+Editor avanzado
+
+Importación externa
+
+API registry completo
+
+Fase 4
+
+Comunidad creadora
+
+Eventos
+
+Torneos
+
+📌 REGLAS FUNDAMENTALES
+
+Nada se ejecuta sin validación.
+
+Cliente nunca controla reglas.
+
+Toda carta pasa por balance AI.
+
+AI no puede saltarse validator.
+
+Editor nunca ilimitado.
+
+Seguridad primero.
+
+Visual siempre prioridad.
+
+🔥 LO QUE ESTÁ PERFECTO EN TU IDEA
+
+✔ Sistema puntos creativo
+✔ API libre configurable
+✔ AI local
+✔ Firma original
+✔ Duelos con apuestas
+✔ Editor modular

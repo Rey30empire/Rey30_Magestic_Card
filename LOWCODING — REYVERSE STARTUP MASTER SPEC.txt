@@ -1,0 +1,251 @@
+CODEX: IMPLEMENTAR "REYVERSE STARTUP MODE"
+
+ESTE PROYECTO YA NO ES SOLO UNA APP.
+APUNTAMOS A UNA STARTUP GLOBAL AI-FIRST.
+
+OBJETIVO:
+Construir una plataforma escalable que incluya:
+
+- TCG competitivo online
+- Economía con packs reales
+- Marketplace de cartas
+- AI balance y generación automática
+- Sistema de temporadas
+- eSports automático
+- Mercado secundario
+- Universo narrativo expandido
+- Integración Unreal para trailers
+- AI transversal cognitiva
+- Arquitectura lista para escalar globalmente
+
+=========================================================
+0) MODO STARTUP (CAMBIO DE MENTALIDAD)
+=========================================================
+
+Agregar archivo:
+ /docs/STARTUP_MODE.md
+
+Definir:
+
+- Misión
+- Visión
+- Producto inicial (MVP)
+- Estrategia de monetización
+- Roadmap 24 meses
+- Ventaja competitiva (AI transversal)
+
+=========================================================
+1) PRODUCTO MVP (FASE LANZAMIENTO)
+=========================================================
+
+Construir primero:
+
+- TCG jugable online
+- Sistema básico de ranking
+- Packs con probabilidades reales
+- Editor de cartas funcional
+- Marketplace básico
+- AI balance simple
+
+NO implementar aún:
+- Blockchain
+- Series animadas completas
+- eSports mundial
+Eso es fase expansión.
+
+=========================================================
+2) ARQUITECTURA ESCALABLE
+=========================================================
+
+Separar en micro-módulos:
+
+/backend
+    api-server (Node)
+    game-server (WebSocket)
+    ai-server (AI Core)
+    economy-service
+    tournament-service
+    marketplace-service
+
+/frontend
+    web-client
+    desktop-client (Tauri)
+    admin-dashboard
+
+/database
+    Postgres
+    Redis (cache)
+    Object storage (S3 compatible)
+
+=========================================================
+3) AI TRANSVERSAL COGNITIVA
+=========================================================
+
+AI Core debe ser servicio independiente.
+
+Funciones:
+
+- Balance automático
+- Simulación masiva
+- Análisis meta
+- Generación de cartas
+- Optimización de mazos
+- Ajuste económico
+- Detección fraude
+- Generación narrativa
+
+Implementar como microservicio:
+ /backend/ai-server
+
+Con API:
+
+POST /simulate
+POST /generate-card
+POST /balance
+POST /analyze-meta
+POST /optimize-deck
+
+=========================================================
+4) MODELO DE MONETIZACIÓN
+=========================================================
+
+Implementar:
+
+- Venta de packs
+- Venta de cosméticos
+- Marketplace con comisión 5-10%
+- Battle Pass estacional
+- Torneos premium
+
+NO hacer pay-to-win.
+Balance siempre controlado por AI.
+
+=========================================================
+5) ROADMAP 24 MESES
+=========================================================
+
+Mes 0–3:
+- MVP jugable
+- Beta cerrada
+
+Mes 3–6:
+- Sistema de temporadas
+- AI balance completo
+
+Mes 6–12:
+- eSports regional
+- Marketplace avanzado
+- Anti-fraud AI
+
+Mes 12–18:
+- Trend AI
+- Generación automática de cartas
+- Meta dinámico real
+
+Mes 18–24:
+- Universo narrativo
+- Unreal cinematics
+- Expansión internacional
+
+=========================================================
+6) SISTEMA DE VERSIONADO PROFESIONAL
+=========================================================
+
+Implementar GitFlow:
+
+main (estable)
+develop
+feature/*
+hotfix/*
+release/*
+
+Cada módulo nuevo:
+feature/<modulo>
+
+Antes de merge:
+- Tests passing
+- AI simulations valid
+- No ruptura de economía
+
+Crear tags por milestone:
+v0.1-beta
+v0.5-open-beta
+v1.0-launch
+
+=========================================================
+7) TESTING OBLIGATORIO
+=========================================================
+
+Implementar:
+
+- Unit tests
+- Simulation tests
+- Economy stress tests
+- Match simulation 10k runs
+- Anti exploit tests
+
+=========================================================
+8) ANALYTICS Y DATA
+=========================================================
+
+Implementar sistema de métricas:
+
+- Retención
+- Winrate por carta
+- Economía circulante
+- Meta dominancia
+- Precio mercado
+
+AI usa estos datos para decisiones.
+
+=========================================================
+9) ESCALABILIDAD CLOUD
+=========================================================
+
+Preparar para:
+
+- AWS / GCP
+- Docker containers
+- CI/CD pipeline
+- Load balancing
+- CDN global
+
+No hardcode local logic.
+Todo configurable por ENV.
+
+=========================================================
+10) MARCA Y EXPANSIÓN
+=========================================================
+
+Crear módulo:
+/brand
+
+- Lore oficial
+- Universo base
+- Personajes
+- Identidad visual
+
+Preparar assets para:
+- Animación
+- Merchandise
+- Colaboraciones
+
+=========================================================
+11) OBJETIVO FINAL
+=========================================================
+
+Reyverse debe convertirse en:
+
+- Plataforma competitiva viva
+- Economía dinámica
+- Juego balanceado por AI
+- Ecosistema creador
+- Marca multimedia
+- Startup escalable global
+
+=========================================================
+PRIORIDAD AHORA:
+1. Consolidar MVP.
+2. Estabilizar TCG online.
+3. Implementar AI balance.
+4. Abrir beta cerrada.

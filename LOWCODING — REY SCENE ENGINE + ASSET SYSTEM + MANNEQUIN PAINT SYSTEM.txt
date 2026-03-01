@@ -1,0 +1,313 @@
+CODEX: IMPLEMENTAR "ReyScene Engine"
+
+OBJETIVO:
+Crear motor de escenas modular para arenas de duelo con:
+
+- Sistema de escenas cargables
+- Motor físico básico
+- Sistema de assets importables/exportables
+- Adaptación automática de assets externos
+- Biblioteca reutilizable
+- Maniquíes base configurables
+- Subida de imagen como textura
+- Sistema de pintado dinámico en 3D
+- Integración con Battle Engine
+- Versionado seguro
+- Arquitectura modular
+
+=========================================================
+0) REGLAS CRÍTICAS
+=========================================================
+
+1. NO modificar CAD core.
+2. NO modificar Card Editor.
+3. NO romper Battle Engine.
+4. Crear módulo independiente:
+   /engine/scene-system
+5. Integración por adapters.
+6. Usar feature flag:
+   enableSceneEngine
+7. Versionado obligatorio por fases.
+
+=========================================================
+1) ESTRUCTURA
+=========================================================
+
+/src/engine/scene-system
+    SceneManager.ts
+    SceneLoader.ts
+    SceneSerializer.ts
+    PhysicsEngine.ts
+    AssetManager.ts
+    AssetAdapter.ts
+    AssetLibrary.ts
+    MannequinSystem.ts
+    TexturePainter.ts
+    EnvironmentGenerator.ts
+    SceneStore.ts
+
+=========================================================
+2) MOTOR DE ESCENAS
+=========================================================
+
+SceneManager:
+
+Funciones:
+- createScene()
+- loadScene(sceneId)
+- saveScene()
+- unloadScene()
+- switchScene()
+
+Scene debe contener:
+- objects[]
+- environment
+- physicsConfig
+- lighting
+- cameraPresets
+
+Cada objeto:
+- id
+- mesh
+- transform
+- physicsBody
+- material
+- metadata
+
+=========================================================
+3) MOTOR DE FÍSICA
+=========================================================
+
+PhysicsEngine:
+
+Usar:
+- cannon-es o rapier.js
+
+Soportar:
+- rigid body
+- static body
+- collision detection
+- gravity toggle
+- impulse force
+- trigger volumes
+
+Permitir:
+- Activar física solo en modo arena
+- Desactivar para render estático
+
+=========================================================
+4) SISTEMA DE ASSETS
+=========================================================
+
+AssetManager:
+
+Funciones:
+- importGLB(file)
+- importFBX(file)
+- importOBJ(file)
+- exportAsset(assetId)
+- adaptAsset(assetId)
+- cloneAsset(assetId)
+
+AssetAdapter:
+
+Al importar asset externo:
+- Normalizar escala
+- Recentrar pivote
+- Recalcular normals
+- Detectar materiales
+- Reasignar a sistema PBR interno
+- Generar collider automático
+
+AssetLibrary:
+
+- Categorías:
+    arenas
+    props
+    environments
+    effects
+    mannequins
+- Metadata
+- Thumbnail auto-generado
+
+=========================================================
+5) ADAPTACIÓN AUTOMÁTICA DE ASSETS
+=========================================================
+
+Al cargar asset externo:
+
+Proceso:
+1. Analizar geometría
+2. Validar manifold
+3. Normalizar unidad (metros)
+4. Aplicar material default si falta
+5. Generar collider simple
+6. Guardar versión adaptada interna
+
+Debe poder:
+- Reutilizar
+- Editar
+- Guardar como plantilla
+
+=========================================================
+6) MANNEQUIN SYSTEM
+=========================================================
+
+MannequinSystem:
+
+Crear modelos base:
+
+- humano base
+- criatura base
+- mascota base
+- carta flotante base
+
+Cada maniquí:
+- rig básico opcional
+- UV limpio
+- Material editable
+- Zonas pintables
+
+Funciones:
+- loadMannequin(type)
+- applyTexture(image)
+- recolor(hex)
+- applyPattern()
+- saveVariant()
+
+=========================================================
+7) SUBIR FOTO Y PINTAR MODELO
+=========================================================
+
+TexturePainter:
+
+Permitir:
+- Upload image
+- Convertir a textura
+- Proyección UV automática
+- Pintado manual con brush
+- Pintado por máscara
+- Ajuste brillo/contraste
+- Guardar textura personalizada
+
+Implementación:
+
+Modo 1:
+- Project texture planar/cylindrical
+
+Modo 2:
+- Pintado directo en canvas asociado a textura
+
+Integrar con:
+- Shader holográfico
+- Foil
+- Rareza
+
+=========================================================
+8) GENERADOR DE ARENAS
+=========================================================
+
+EnvironmentGenerator:
+
+Permitir:
+- Arena circular
+- Arena flotante
+- Arena volcánica
+- Arena cósmica
+- Arena templo antiguo
+
+Parámetros:
+- tamaño
+- niebla
+- iluminación
+- partículas ambientales
+- clima
+
+=========================================================
+9) INTEGRACIÓN CON BATTLE ENGINE
+=========================================================
+
+BattleEngine debe poder:
+
+- loadScene(arenaId)
+- spawnActors()
+- aplicar física ligera
+- activar partículas de ambiente
+
+SceneEngine no modifica lógica de combate.
+Solo entorno visual + físico.
+
+=========================================================
+10) SERIALIZACIÓN
+=========================================================
+
+SceneSerializer:
+
+Guardar:
+- JSON scene
+- Referencias a assets
+- Config física
+- Material overrides
+
+Permitir:
+- Exportar escena
+- Importar escena
+- Versionar escena
+
+=========================================================
+11) VERSIONADO
+=========================================================
+
+Antes de iniciar:
+
+git checkout -b feature/scene-engine
+
+FASE 1:
+SceneManager base
+Commit.
+
+FASE 2:
+AssetManager + import
+Commit.
+
+FASE 3:
+PhysicsEngine
+Commit.
+
+FASE 4:
+Mannequin + texture upload
+Commit.
+
+FASE 5:
+Arena generator
+Commit.
+
+FASE 6:
+Battle integration
+Commit.
+
+Tags:
+scene-engine-alpha
+scene-engine-beta
+scene-engine-stable
+
+Rollback siempre posible.
+
+=========================================================
+12) RESULTADO FINAL
+=========================================================
+
+La plataforma debe permitir:
+
+- Crear arenas personalizadas
+- Importar assets externos
+- Adaptarlos automáticamente
+- Guardarlos en biblioteca
+- Reutilizarlos
+- Aplicar física
+- Cargar maniquíes base
+- Subir imagen y pintar modelo
+- Integrar en duelo
+- Guardar escenas
+- Exportar escenas
+- Versionar todo con Git

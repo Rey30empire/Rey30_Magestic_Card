@@ -1,0 +1,2 @@
+[env] VAULT_SECRET not set. Falling back to JWT_SECRET for local development.
+^C^C

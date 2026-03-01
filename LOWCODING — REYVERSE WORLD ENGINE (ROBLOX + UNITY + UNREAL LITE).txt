@@ -1,0 +1,325 @@
+CODEX: IMPLEMENTAR "Reyverse World Engine"
+
+OBJETIVO:
+Crear motor de creación de mundos escalable que combine:
+
+- Motor tipo Roblox (UGC worlds)
+- Editor tipo Unity (semi-profesional)
+- Render tipo Unreal-lite (cinemático)
+- Metaverso competitivo online
+- AI transversal cognitiva
+- Marketplace de assets
+- Física avanzada
+- Multiplayer persistente
+
+Arquitectura modular, escalable y versionada.
+
+=========================================================
+0) STACK TECNOLÓGICO (USAR LO MÁS POTENTE DISPONIBLE)
+=========================================================
+
+FRONTEND / RENDER:
+
+- React + TypeScript
+- Three.js (base rendering)
+- React Three Fiber
+- WebGPU (cuando esté estable)
+- @react-three/postprocessing
+- three-mesh-bvh (raycast acelerado)
+- three-bvh-csg (booleans)
+- GLSL custom shaders
+
+FÍSICA:
+
+- Rapier.js (mejor rendimiento que cannon)
+- Soporte WASM
+
+MULTIPLAYER:
+
+- Node.js server
+- WebSocket (ws)
+- Socket.IO (fallback)
+- Redis para sync
+- Authoritative server model
+
+BACKEND:
+
+- Node.js + Fastify
+- PostgreSQL
+- Redis
+- S3-compatible storage
+- Docker
+
+AI CORE:
+
+- Microservicio separado
+- Python + FastAPI
+- Modelo local o API externa
+- Simulación Monte Carlo
+
+CI/CD:
+
+- GitHub Actions
+- Docker containers
+- Cloud deployment AWS/GCP
+
+=========================================================
+1) ESTRUCTURA GLOBAL
+=========================================================
+
+/engine/world
+    WorldManager.ts
+    WorldLoader.ts
+    WorldSerializer.ts
+    WorldPhysics.ts
+    WorldNetworking.ts
+    WorldPermissions.ts
+    WorldAIIntegration.ts
+
+/editor/world-editor
+    WorldEditorRoot.tsx
+    HierarchyPanel.tsx
+    InspectorPanel.tsx
+    AssetBrowser.tsx
+    TerrainEditor.tsx
+    ScriptEditor.tsx
+
+/metaverse
+    InstanceManager.ts
+    ServerOrchestrator.ts
+    AvatarSystem.ts
+    EconomyIntegration.ts
+
+=========================================================
+2) MOTOR TIPO ROBLOX (UGC WORLDS)
+=========================================================
+
+Usuarios pueden:
+
+- Crear mundo nuevo
+- Guardarlo en la nube
+- Publicarlo
+- Invitar jugadores
+- Monetizar acceso
+
+WorldManager debe permitir:
+
+- createWorld()
+- loadWorld(worldId)
+- publishWorld()
+- setPermissions()
+
+Sistema de permisos:
+- Private
+- Friends
+- Public
+- Paid access
+
+=========================================================
+3) EDITOR TIPO UNITY (SEMI-PRO)
+=========================================================
+
+Debe incluir:
+
+- Hierarchy panel
+- Inspector panel
+- Scene view
+- Prefabs
+- Component system
+
+Componentes:
+
+- Transform
+- MeshRenderer
+- Collider
+- RigidBody
+- Script
+- Audio
+- ParticleEmitter
+- Light
+- Camera
+
+Sistema tipo ECS (Entity Component System) recomendado.
+
+=========================================================
+4) RENDER TIPO UNREAL LITE
+=========================================================
+
+Implementar:
+
+- PBR materials
+- HDRI lighting
+- Bloom
+- SSAO
+- Depth of Field
+- Motion blur
+- Volumetric fog
+
+Shaders avanzados:
+
+- Holographic
+- Dissolve
+- Energy shield
+- Fire
+- Water
+- Glass
+
+Preparar migración futura a WebGPU.
+
+=========================================================
+5) TERRENO Y ESCULTURA
+=========================================================
+
+TerrainEditor:
+
+- Heightmap sculpt
+- Raise / Lower
+- Smooth
+- Paint texture
+- Biomes
+- Water plane
+- Vegetation scattering
+
+=========================================================
+6) SCRIPTING SYSTEM
+=========================================================
+
+ScriptEditor:
+
+- JavaScript sandbox
+- Python sandbox opcional
+- API segura expuesta
+
+Scripts pueden:
+
+- Spawn objects
+- Apply forces
+- Detect collisions
+- Trigger events
+- Create UI
+
+=========================================================
+7) MULTIPLAYER METAVERSO
+=========================================================
+
+InstanceManager:
+
+- Crear instancias por mundo
+- Escalar servidores dinámicamente
+- Sync state via server
+
+WorldNetworking:
+
+- Player movement
+- Physics sync
+- Object interaction
+- Anti cheat AI
+
+=========================================================
+8) AVATAR SYSTEM
+=========================================================
+
+AvatarSystem:
+
+- Cargar maniquí base
+- Personalizar skin
+- Aplicar textura subida
+- Aplicar shaders raros
+- Guardar inventario
+
+=========================================================
+9) MARKETPLACE GLOBAL
+=========================================================
+
+Usuarios pueden vender:
+
+- Mundos
+- Assets
+- Skins
+- Scripts
+- Efectos
+- Arenas
+
+Sistema:
+
+- Subida asset
+- Validación AI
+- Thumbnail auto
+- Sistema comisión
+
+=========================================================
+10) AI TRANSVERSAL EN MUNDOS
+=========================================================
+
+WorldAIIntegration:
+
+AI puede:
+
+- Generar mundo procedural
+- Balancear economía interna
+- Detectar exploits
+- Ajustar física
+- Optimizar rendimiento
+
+AI puede:
+
+- Leer comportamiento jugadores
+- Ajustar dificultad
+- Generar eventos dinámicos
+
+=========================================================
+11) METAVERSO COMPETITIVO
+=========================================================
+
+Integrar con TCG:
+
+- Arenas públicas
+- Torneos dentro de mundos
+- Eventos globales
+- Ranking global
+
+=========================================================
+12) VERSIONADO PROFESIONAL
+=========================================================
+
+Usar GitFlow:
+
+main
+develop
+feature/world-engine
+feature/metaverse
+feature/terrain
+feature/networking
+feature/ai-world
+
+Tag milestones:
+
+v0.1-world-editor
+v0.5-multiplayer
+v1.0-metaverse-beta
+
+=========================================================
+13) SEGURIDAD Y ESCALABILIDAD
+=========================================================
+
+- Server authoritative
+- Validación física en servidor
+- AI anti-cheat
+- Rate limiting
+- Logging global
+- Métricas rendimiento
+
+=========================================================
+14) RESULTADO FINAL
+=========================================================
+
+Reyverse debe permitir:
+
+- Crear mundos estilo Roblox
+- Editarlos estilo Unity
+- Renderizarlos estilo Unreal-lite
+- Conectar jugadores globalmente
+- Monetizar assets
+- Escalar servidores automáticamente
+- Integrar AI transversal
+- Soportar metaverso competitivo

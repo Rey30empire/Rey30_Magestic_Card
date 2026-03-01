@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rey30 Dev Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg" />
+    <link rel="stylesheet" href="/shared/tokens.css" />
+    <link rel="stylesheet" href="/shared/ui.css" />
+    <link rel="stylesheet" href="/console/console.css" />
+  </head>
+  <body class="app-bg">
+    <div class="screen-root ui-shell console-layout">
+      <header class="ui-glass ui-card console-hero">
+        <div>
+          <p class="ui-kicker">Rey30 Operations</p>
+          <h1 class="ui-heading">Dev Console</h1>
+          <p class="console-subtitle">Panel operativo completo para auth, ACS home, projects y training jobs.</p>
+        </div>
+        <div class="console-hero-actions">
+          <label class="console-platform-picker">
+            <span>Platform</span>
+            <select id="console-platform-select" class="ui-select">
+              <option value="web">web</option>
+              <option value="mobile">mobile</option>
+              <option value="desktop">desktop</option>
+            </select>
+          </label>
+          <span id="console-health" class="ui-badge info">Backend checking...</span>
+          <a class="ui-btn ui-btn-primary" href="/app">Open App Shell</a>
+        </div>
+      </header>
+
+      <main class="console-grid">
+        <section class="ui-glass ui-card">
+          <div class="console-section-header">
+            <h2 class="ui-heading">Access</h2>
+            <button id="console-logout-btn" class="ui-btn ui-btn-ghost hidden">Logout</button>
+          </div>
+
+          <div id="console-auth-switcher">
+            <div id="console-auth-tabs" class="ui-tabs">
+              <button class="ui-tab active" data-tab="login">Login</button>
+              <button class="ui-tab" data-tab="register">Register</button>
+            </div>
+
+            <div class="console-auth-panels" id="console-auth-panels">
+              <form id="console-login-form" class="console-stack" data-tab-panel="login">
+                <label class="ui-field">
+                  <span class="ui-label">Username</span>
+                  <input class="ui-input" id="console-login-username" type="text" minlength="3" maxlength="30" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Password</span>
+                  <input class="ui-input" id="console-login-password" type="password" minlength="8" maxlength="120" required />
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Login</button>
+              </form>
+
+              <form id="console-register-form" class="console-stack hidden" data-tab-panel="register">
+                <label class="ui-field">
+                  <span class="ui-label">Username</span>
+                  <input class="ui-input" id="console-register-username" type="text" minlength="3" maxlength="30" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Password</span>
+                  <input class="ui-input" id="console-register-password" type="password" minlength="8" maxlength="120" required />
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Create Account</button>
+              </form>
+            </div>
+          </div>
+
+          <p class="console-note mono" id="console-auth-note">Sin sesion activa.</p>
+        </section>
+
+        <section class="ui-glass ui-card">
+          <div class="console-section-header">
+            <h2 class="ui-heading">Profile</h2>
+            <button id="console-refresh-btn" class="ui-btn ui-btn-secondary">Refresh</button>
+          </div>
+          <div id="console-profile-card" class="console-empty">Inicia sesion para cargar perfil.</div>
+        </section>
+
+        <section class="ui-glass ui-card">
+          <div class="console-section-header">
+            <h2 class="ui-heading">ACS Home</h2>
+            <button id="console-acs-refresh-btn" class="ui-btn ui-btn-secondary">Refresh ACS</button>
+          </div>
+          <div id="console-acs-summary" class="console-empty">Inicia sesion para cargar ACS Home.</div>
+          <div id="console-acs-counts" class="console-chip-grid"></div>
+          <h3 class="console-subheading">Modules</h3>
+          <ul id="console-acs-modules" class="console-list"></ul>
+          <h3 class="console-subheading">Training modes</h3>
+          <ul id="console-acs-training" class="console-list"></ul>
+        </section>
+
+        <section class="ui-glass ui-card console-span-2">
+          <div class="console-section-header">
+            <h2 class="ui-heading">ACS Workspace</h2>
+            <button id="console-modules-refresh-btn" class="ui-btn ui-btn-secondary">Refresh Workspace</button>
+          </div>
+          <div class="console-toolbar">
+            <label class="ui-field">
+              <span class="ui-label">Project Context</span>
+              <select class="ui-select" id="console-context-project"></select>
+            </label>
+            <label class="ui-field">
+              <span class="ui-label">Agent Context</span>
+              <select class="ui-select" id="console-context-agent"></select>
+            </label>
+            <div class="console-toolbar-status">
+              <span id="console-modules-status" class="ui-badge info">Workspace not loaded</span>
+            </div>
+          </div>
+
+          <div id="console-module-switcher">
+            <div id="console-module-tabs" class="ui-tabs">
+              <button class="ui-tab active" data-tab="agentEditor">Agent Editor</button>
+              <button class="ui-tab" data-tab="connection">Connection</button>
+              <button class="ui-tab" data-tab="rules">Rules</button>
+              <button class="ui-tab" data-tab="skills">Skills</button>
+              <button class="ui-tab" data-tab="tools">Tools</button>
+              <button class="ui-tab" data-tab="memory">Memory</button>
+              <button class="ui-tab" data-tab="sandbox">Sandbox</button>
+              <button class="ui-tab" data-tab="marketplace">Marketplace</button>
+            </div>
+
+            <div id="console-module-panels" class="console-module-panels">
+            <section class="console-module-panel" data-tab-panel="agentEditor">
+              <form id="console-agent-create-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Agent Name</span>
+                  <input class="ui-input" id="console-agent-create-name" type="text" minlength="2" maxlength="80" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Role</span>
+                  <input class="ui-input" id="console-agent-create-role" type="text" minlength="2" maxlength="60" value="assistant" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Memory Scope</span>
+                  <select class="ui-select" id="console-agent-create-memory-scope">
+                    <option value="private">private</option>
+                    <option value="project">project</option>
+                    <option value="public">public</option>
+                  </select>
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Create Agent</button>
+              </form>
+              <ul id="console-agent-list" class="console-list"></ul>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="connection">
+              <form id="console-agent-connect-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Agent</span>
+                  <select class="ui-select" id="console-connect-agent-id"></select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Provider</span>
+                  <select class="ui-select" id="console-connect-provider">
+                    <option value="api">api</option>
+                    <option value="ollama">ollama</option>
+                    <option value="llama.cpp">llama.cpp</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Model</span>
+                  <input class="ui-input" id="console-connect-model" type="text" value="gpt-4.1-mini" maxlength="120" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">API Key (for connect)</span>
+                  <input class="ui-input" id="console-connect-api-key" type="password" minlength="8" maxlength="500" required />
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Connect Agent</button>
+                <button type="button" id="console-agent-disconnect-btn" class="ui-btn ui-btn-secondary">Disconnect Agent</button>
+              </form>
+              <div id="console-connection-state" class="console-empty">Select an agent to inspect connection state.</div>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="rules">
+              <form id="console-project-rule-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Title</span>
+                  <input class="ui-input" id="console-rule-title" type="text" minlength="3" maxlength="120" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Content</span>
+                  <textarea class="ui-textarea" id="console-rule-content" rows="3" minlength="3" maxlength="2000" required></textarea>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Enforcement</span>
+                  <select class="ui-select" id="console-rule-enforcement">
+                    <option value="soft">soft</option>
+                    <option value="hard">hard</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Priority</span>
+                  <input class="ui-input" id="console-rule-priority" type="number" min="1" max="100" value="50" required />
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Create Project Rule</button>
+              </form>
+              <h3 class="console-subheading">Global Rules</h3>
+              <ul id="console-rules-global-list" class="console-list"></ul>
+              <h3 class="console-subheading">Project Rules</h3>
+              <ul id="console-rules-project-list" class="console-list"></ul>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="skills">
+              <form id="console-skill-tests-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Skill</span>
+                  <select class="ui-select" id="console-skill-id"></select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Max Tests</span>
+                  <input class="ui-input" id="console-skill-max-tests" type="number" min="1" max="200" value="20" required />
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Run Skill Tests</button>
+              </form>
+              <div id="console-skill-tests-output" class="console-empty">Run tests to see validation results.</div>
+              <ul id="console-skills-list" class="console-list"></ul>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="tools">
+              <form id="console-agent-tool-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Agent</span>
+                  <select class="ui-select" id="console-tool-agent-id"></select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Tool</span>
+                  <select class="ui-select" id="console-tool-key"></select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Config JSON</span>
+                  <textarea class="ui-textarea mono" id="console-tool-config" rows="3">{}</textarea>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Allowed</span>
+                  <select class="ui-select" id="console-tool-allowed">
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Assign Tool</button>
+              </form>
+              <ul id="console-tools-list" class="console-list"></ul>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="memory">
+              <form id="console-memory-create-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Scope</span>
+                  <select class="ui-select" id="console-memory-scope">
+                    <option value="user">user</option>
+                    <option value="project">project</option>
+                    <option value="agent">agent</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Text</span>
+                  <textarea class="ui-textarea" id="console-memory-text" rows="3" minlength="2" maxlength="6000" required></textarea>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Metadata JSON</span>
+                  <textarea class="ui-textarea mono" id="console-memory-metadata" rows="3">{}</textarea>
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Create Memory</button>
+              </form>
+              <ul id="console-memory-list" class="console-list"></ul>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="sandbox">
+              <form id="console-sandbox-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Agent</span>
+                  <select class="ui-select" id="console-sandbox-agent-id"></select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">dryRunInput JSON</span>
+                  <textarea class="ui-textarea mono" id="console-sandbox-input" rows="3">{}</textarea>
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Run Sandbox Test</button>
+              </form>
+              <div id="console-sandbox-output" class="console-empty">Run sandbox checks to validate rules/tools/skills integrity.</div>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="marketplace">
+              <form id="console-template-import-form" class="console-stack">
+                <label class="ui-field">
+                  <span class="ui-label">Template</span>
+                  <select class="ui-select" id="console-import-template-id"></select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Name Override (optional)</span>
+                  <input class="ui-input" id="console-import-name" type="text" minlength="2" maxlength="120" />
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Import Template</button>
+              </form>
+              <div id="console-marketplace-output" class="console-empty">Import status appears here.</div>
+              <ul id="console-marketplace-list" class="console-list"></ul>
+            </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="ui-glass ui-card">
+          <div class="console-section-header">
+            <h2 class="ui-heading">Projects</h2>
+            <span id="console-project-count" class="ui-badge info">0 items</span>
+          </div>
+
+          <form id="console-project-form" class="console-stack console-disabled">
+            <label class="ui-field">
+              <span class="ui-label">Name</span>
+              <input class="ui-input" id="console-project-name" type="text" minlength="3" maxlength="80" required />
+            </label>
+            <label class="ui-field">
+              <span class="ui-label">Description</span>
+              <textarea class="ui-textarea" id="console-project-description" rows="3" maxlength="400"></textarea>
+            </label>
+            <button type="submit" class="ui-btn ui-btn-primary">Create Project</button>
+          </form>
+
+          <ul id="console-project-list" class="console-list"></ul>
+        </section>
+
+        <section class="ui-glass ui-card">
+          <div class="console-section-header">
+            <h2 class="ui-heading">Training Jobs</h2>
+            <span id="console-job-count" class="ui-badge info">0 items</span>
+          </div>
+
+          <form id="console-training-form" class="console-stack console-disabled">
+            <label class="ui-field">
+              <span class="ui-label">Mode</span>
+              <select class="ui-select" id="console-training-mode">
+                <option value="profile-tuning">profile-tuning (web/mobile/desktop)</option>
+                <option value="fine-tuning">fine-tuning (desktop)</option>
+                <option value="lora">lora (desktop)</option>
+                <option value="adapter">adapter (desktop)</option>
+              </select>
+            </label>
+            <label class="ui-field">
+              <span class="ui-label">Config JSON</span>
+              <textarea class="ui-textarea mono" id="console-training-config" rows="5">{ "simulateStepDelayMs": 240 }</textarea>
+            </label>
+            <button type="submit" class="ui-btn ui-btn-primary">Create Job</button>
+          </form>
+
+          <ul id="console-job-list" class="console-list"></ul>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/console/console.js"></script>
+  </body>
+</html>

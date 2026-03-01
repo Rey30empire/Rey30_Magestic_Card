@@ -1,0 +1,35 @@
+[
+  { "id": "solid_sand", "name": "Sand", "kind": "solidColor", "color": "#d2b48c" },
+  { "id": "solid_ember", "name": "Ember", "kind": "solidColor", "color": "#c95138" },
+  { "id": "solid_steel", "name": "Steel", "kind": "solidColor", "color": "#8b95a2" },
+  { "id": "solid_moss", "name": "Moss", "kind": "solidColor", "color": "#54744e" },
+  { "id": "solid_ocean", "name": "Ocean", "kind": "solidColor", "color": "#3e74b8" },
+  { "id": "solid_ink", "name": "Ink", "kind": "solidColor", "color": "#1f2630" },
+  { "id": "solid_cream", "name": "Cream", "kind": "solidColor", "color": "#ece6d8" },
+  { "id": "solid_royal", "name": "Royal", "kind": "solidColor", "color": "#473ebf" },
+  { "id": "solid_coral", "name": "Coral", "kind": "solidColor", "color": "#e26f5f" },
+  { "id": "solid_forest", "name": "Forest", "kind": "solidColor", "color": "#2f5944" },
+  { "id": "solid_graphite", "name": "Graphite", "kind": "solidColor", "color": "#3f434a" },
+  { "id": "solid_gold", "name": "Gold", "kind": "solidColor", "color": "#c3a25b" },
+  {
+    "id": "pbr_plastic_matte",
+    "name": "Plastic Matte",
+    "kind": "pbr",
+    "pbr": { "metalness": 0.05, "roughness": 0.85, "baseColor": "#d8d8d8" }
+  },
+  {
+    "id": "pbr_plastic_glossy",
+    "name": "Plastic Glossy",
+    "kind": "pbr",
+    "pbr": { "metalness": 0.1, "roughness": 0.28, "baseColor": "#d6d6d6" }
+  },
+  { "id": "pbr_metal", "name": "Metal", "kind": "pbr", "pbr": { "metalness": 0.9, "roughness": 0.22, "baseColor": "#a7afb8" } },
+  { "id": "pbr_rubber", "name": "Rubber", "kind": "pbr", "pbr": { "metalness": 0, "roughness": 0.95, "baseColor": "#1b1d22" } },
+  { "id": "pbr_wood", "name": "Wood", "kind": "pbr", "pbr": { "metalness": 0, "roughness": 0.72, "baseColor": "#8f6236" } },
+  {
+    "id": "pbr_glassish",
+    "name": "Glass-ish",
+    "kind": "pbr",
+    "pbr": { "metalness": 0, "roughness": 0.02, "baseColor": "#b8d6ed" }
+  }
+]

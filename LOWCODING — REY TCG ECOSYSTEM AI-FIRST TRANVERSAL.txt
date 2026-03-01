@@ -1,0 +1,315 @@
+CODEX: IMPLEMENTAR "ReyTCG Ecosystem AI-First Transversal Core"
+
+OBJETIVO:
+Convertir la plataforma en sistema TCG completo con:
+
+- Sistema económico con packs aleatorios reales
+- AI generadora de cartas balanceadas automáticamente
+- Motor de temporadas con cambios de meta
+- Campaña single player con AI narrativa
+- Integración Unreal Engine para trailers AAA
+- AI transversal cognitiva que coordina todo
+
+=========================================================
+0) ARQUITECTURA CENTRAL — AI TRANSVERSAL
+=========================================================
+
+Crear núcleo:
+
+/src/engine/ai-core
+    TransversalAI.ts
+    CognitiveGraph.ts
+    MemoryStore.ts
+    SimulationEngine.ts
+    ToolRouter.ts
+    EconomyAI.ts
+    BalanceAI.ts
+    NarrativeAI.ts
+    MetaAI.ts
+
+La AI debe poder:
+
+- Leer estado del juego
+- Leer estadísticas globales
+- Leer economía
+- Leer meta
+- Generar cartas nuevas
+- Ajustar balance
+- Crear historia
+- Diseñar temporadas
+
+La AI actúa como orquestador central.
+
+=========================================================
+1) SISTEMA ECONÓMICO — PACKS REALES
+=========================================================
+
+/src/engine/economy
+    PackSystem.ts
+    DropTable.ts
+    ProbabilityEngine.ts
+    CurrencySystem.ts
+    RewardSystem.ts
+    AntiInflationModel.ts
+
+PACK SYSTEM:
+
+Tipos:
+- Basic Pack
+- Rare Pack
+- Legendary Pack
+- Seasonal Pack
+- Event Pack
+
+Cada pack contiene:
+- 5 cartas
+- Probabilidades reales configurables
+
+Ejemplo drop rates:
+
+COMMON: 65%
+UNCOMMON: 20%
+RARE: 10%
+ULTRA_RARE: 4%
+SECRET: 1%
+
+ProbabilityEngine:
+- RNG con seed verificable
+- Protección contra streak extremo
+- Sistema pity (garantía después de X packs)
+
+CurrencySystem:
+- Gold (free)
+- Gems (premium)
+- Seasonal tokens
+
+RewardSystem:
+- Daily quests
+- Weekly rewards
+- Ranked rewards
+
+AntiInflationModel:
+- Ajusta recompensas según economía global
+
+=========================================================
+2) AI GENERADORA DE CARTAS BALANCEADAS
+=========================================================
+
+/src/engine/card-generator
+    CardGeneratorAI.ts
+    StatModel.ts
+    AbilityComposer.ts
+    SynergyAnalyzer.ts
+
+CardGeneratorAI debe:
+
+- Generar stats base
+- Generar habilidades
+- Ajustar coste
+- Simular 500+ partidas internas
+- Ajustar hasta que winrate esté en rango 45%-55%
+
+Proceso:
+
+1. Generar carta candidata
+2. Simular contra meta actual
+3. Medir impacto
+4. Ajustar stats
+5. Validar rareza
+6. Guardar como provisional
+
+=========================================================
+3) MOTOR DE TEMPORADAS
+=========================================================
+
+/src/engine/seasons
+    SeasonManager.ts
+    RotationSystem.ts
+    MetaShiftEngine.ts
+    SeasonalRewards.ts
+
+Cada temporada:
+
+- Duración (ej 3 meses)
+- Rotación de cartas
+- Nuevas cartas generadas por AI
+- Ajustes de balance
+- Nuevo marco temático
+- Eventos especiales
+
+MetaShiftEngine:
+
+- Detecta cartas dominantes
+- Sugerir nerf/buff
+- Ajustar probabilidades de pack
+- Crear nuevas cartas counter-meta
+
+=========================================================
+4) CAMPAÑA SINGLE PLAYER AI NARRATIVA
+=========================================================
+
+/src/engine/campaign
+    CampaignManager.ts
+    StoryArcGenerator.ts
+    AIEnemyGenerator.ts
+    DialogueEngine.ts
+    DynamicDifficulty.ts
+
+NarrativeAI debe:
+
+- Crear historia basada en rareza del jugador
+- Generar enemigos con mazos temáticos
+- Crear diálogos dinámicos
+- Ajustar dificultad en tiempo real
+
+Ejemplo:
+
+Jugador usa mazo fuego →
+Historia adapta mundo volcánico →
+Enemigos agua contrarrestan →
+AI balancea dificultad.
+
+=========================================================
+5) SISTEMA COMPETITIVO GLOBAL
+=========================================================
+
+Integrar con online existente:
+
+Ranking:
+- Bronze
+- Silver
+- Gold
+- Platinum
+- Diamond
+- Master
+
+AI debe:
+- Detectar abuso de meta
+- Detectar bots
+- Ajustar matchmaking
+
+=========================================================
+6) INTEGRACIÓN UNREAL ENGINE (TRAILER AAA)
+=========================================================
+
+Crear bridge:
+
+/src/engine/unreal-bridge
+    UnrealExporter.ts
+    CinematicDataBuilder.ts
+    FBXExporter.ts
+    JSONSceneExporter.ts
+
+Función:
+
+- Exportar cartas como FBX
+- Exportar animaciones
+- Exportar datos de batalla
+- Generar JSON para importar en Unreal
+
+Unreal workflow:
+
+1. Exportar escena duelo
+2. Importar en Unreal
+3. Aplicar Nanite materials
+4. Renderizar trailer cinematográfico
+
+=========================================================
+7) AI TRANSVERSAL COGNITIVA
+=========================================================
+
+TransversalAI debe:
+
+- Escuchar eventos:
+    pack_opened
+    match_finished
+    season_started
+    card_generated
+    economy_shift
+
+- Decidir acciones:
+    adjust_balance
+    generate_card
+    create_event
+    boost_drop_rate
+    write_story_arc
+
+CognitiveGraph:
+
+- Nodo economía
+- Nodo meta
+- Nodo balance
+- Nodo narrativa
+- Nodo comunidad
+
+Todos conectados.
+
+=========================================================
+8) IMPLEMENTACIÓN POR FASES
+=========================================================
+
+FASE 1:
+Sistema económico + packs
+Commit.
+
+FASE 2:
+AI generadora de cartas
+Commit.
+
+FASE 3:
+Season manager
+Commit.
+
+FASE 4:
+Campaign AI
+Commit.
+
+FASE 5:
+Meta AI + balance
+Commit.
+
+FASE 6:
+Unreal bridge
+Commit.
+
+=========================================================
+9) GIT CONTROL TOTAL
+=========================================================
+
+Antes de cada fase:
+
+git commit -m "Checkpoint before <feature>"
+
+Crear rama por módulo:
+
+git checkout -b feature/economy
+git checkout -b feature/card-generator
+git checkout -b feature/seasons
+git checkout -b feature/campaign
+git checkout -b feature/unreal-bridge
+
+Después merge controlado.
+
+Tags importantes:
+
+git tag economy-stable
+git tag ai-generator-stable
+git tag season-engine-stable
+git tag campaign-stable
+git tag unreal-bridge-stable
+
+=========================================================
+RESULTADO FINAL
+=========================================================
+
+La plataforma debe:
+
+- Vender packs reales con probabilidad controlada
+- Generar cartas nuevas automáticamente balanceadas
+- Cambiar meta cada temporada
+- Tener campaña narrativa dinámica
+- Ajustar economía con AI
+- Detectar abuso meta
+- Exportar escenas a Unreal
+- Todo coordinado por AI transversal cognitiva
+- Con rollback seguro vía Git

@@ -1,0 +1,337 @@
+CODEX: IMPLEMENTAR “Card Design Engine” COMO MÓDULO INDEPENDIENTE DEL CAD.
+
+OBJETIVO:
+Crear un editor de cartas profesional con:
+- Sistema de capas
+- Material de fondo, borde, marco y arte
+- Herramientas de dibujo
+- Herramientas de corte y edición
+- Navegación interna (Back/Home)
+- Separación completa del CAD
+- Undo/Redo
+- Export PNG/GLB
+
+=========================================================
+0) REGLAS DE ARQUITECTURA
+=========================================================
+
+1. NO modificar motor CAD 3D.
+2. Crear nuevo módulo /engine/card-editor
+3. Editor funciona como mini-app separada.
+4. Navegación independiente con historial interno.
+5. Todo debe tener botón Back y Home.
+6. Sistema de capas obligatorio.
+7. Undo/Redo obligatorio.
+
+=========================================================
+1) ESTRUCTURA
+=========================================================
+
+/src/engine/card-editor
+    CardEditorRoot.tsx
+    CardCanvas.tsx
+    CardLayers.ts
+    CardMaterials.ts
+    CardBrushEngine.ts
+    CardTools.ts
+    CardNavigation.ts
+    CardHistory.ts
+    CardExport.ts
+    CardStore.ts
+
+/src/ui/panels
+    CardEditorPanel.tsx
+
+=========================================================
+2) CARD STORE (ESTADO CENTRAL)
+=========================================================
+
+CardStore debe contener:
+
+- width
+- height
+- layers[]
+- selectedLayerId
+- activeTool
+- materialAssignments
+- navigationStack[]
+- historyUndo[]
+- historyRedo[]
+
+=========================================================
+3) SISTEMA DE CAPAS
+=========================================================
+
+Layer types:
+
+- background
+- border
+- frame
+- artwork
+- text
+- effect
+- overlay
+
+Cada layer tiene:
+
+- id
+- type
+- visible
+- opacity
+- blendMode
+- mask
+- materialId
+- canvasData
+
+=========================================================
+4) SISTEMA DE MATERIALES AVANZADO
+=========================================================
+
+Material types:
+
+- SolidColor
+- GradientLinear
+- GradientRadial
+- TextureImage
+- PatternTile
+- Metallic
+- Holographic
+- Glass
+- GlowEdge
+- Emboss
+- ShadowDrop
+
+Debe existir asignación por:
+
+- Fondo
+- Borde
+- Marco
+- Arte
+- Texto
+
+Material panel debe permitir:
+
+- color picker
+- gradient editor
+- texture upload
+- edge thickness
+- border radius
+- foil shimmer toggle
+
+=========================================================
+5) HERRAMIENTAS (TOOLS)
+=========================================================
+
+Implementar herramientas:
+
+- Select
+- Move
+- Brush
+- Pencil
+- Eraser
+- Shape (rect, circle, polygon)
+- Text
+- Scissors (recorte libre)
+- Knife (corte vectorial)
+- Crop
+- Fill bucket
+- Gradient tool
+- Clone stamp
+- Smudge
+- Blur
+- Layer mask brush
+
+Cada tool:
+
+- onMouseDown
+- onMouseMove
+- onMouseUp
+- applyAction()
+
+=========================================================
+6) BRUSH ENGINE
+=========================================================
+
+CardBrushEngine debe soportar:
+
+- Brush size
+- Hardness
+- Flow
+- Opacity
+- Pressure simulation
+- Custom brush texture
+- Scatter
+- Stroke smoothing
+
+Render usando:
+
+- Canvas 2D context
+o
+- WebGL shader para efectos avanzados
+
+=========================================================
+7) SISTEMA DE CORTE (SCISSORS / KNIFE)
+=========================================================
+
+Scissors:
+- Selección libre
+- Crear nueva layer a partir de selección
+
+Knife:
+- Cortar forma vectorial
+- Dividir layer en 2 shapes
+
+Usar path detection + clipping.
+
+=========================================================
+8) MATERIAL DE BORDE Y FONDO
+=========================================================
+
+Al arrastrar un rectángulo:
+
+Debe crear estructura:
+
+CardRoot
+ ├── BackgroundLayer
+ ├── BorderLayer
+ ├── FrameLayer
+ ├── ArtworkLayer
+ └── TextLayer
+
+BorderLayer debe soportar:
+
+- thickness
+- rounded corners
+- gradient edge
+- glow edge
+- metallic edge
+
+=========================================================
+9) NAVEGACIÓN INTERNA (IMPORTANTE)
+=========================================================
+
+CardNavigation.ts:
+
+Implementar:
+
+- navigationStack[]
+- push(route)
+- back()
+- goHome()
+
+Toda vista nueva:
+
+- Debe tener botón Back
+- Debe tener botón Home
+
+Al entrar a CardEditor:
+- No usar router global
+- Usar router interno
+- Salir solo con botón Home
+
+=========================================================
+10) HISTORIAL (UNDO/REDO)
+=========================================================
+
+CardHistory.ts:
+
+- Command pattern
+- stackUndo[]
+- stackRedo[]
+- max 100 estados
+
+Cada tool debe generar Command.
+
+=========================================================
+11) UI OBLIGATORIA
+=========================================================
+
+Panel izquierdo:
+- Tools vertical toolbar
+
+Panel derecho:
+- Layers panel
+- Materials panel
+
+Top bar:
+- Back arrow
+- Home button
+- Save
+- Export
+- Undo/Redo
+
+=========================================================
+12) EXPORT
+=========================================================
+
+CardExport.ts:
+
+- Export PNG
+- Export JPG
+- Export PDF
+- Export GLB (si la carta se extruye 3D)
+- Export layered file JSON
+
+=========================================================
+13) INTEGRACIÓN CON CAD (OPCIONAL)
+=========================================================
+
+Debe poder:
+
+- Extruir carta a 3D
+- Aplicar material como textura en mesh CAD
+- Usar carta en Battle Engine
+
+=========================================================
+14) FLUJO DE USUARIO
+=========================================================
+
+1. Usuario entra a Card Editor.
+2. Crea fondo.
+3. Agrega borde.
+4. Dibuja arte.
+5. Aplica foil/holo material.
+6. Agrega texto.
+7. Guarda.
+8. Puede regresar con flecha.
+9. Puede ir Home.
+
+=========================================================
+15) ORDEN DE IMPLEMENTACIÓN
+=========================================================
+
+FASE 1:
+- Estructura + navegación
+- Commit
+
+FASE 2:
+- Sistema de capas
+- Commit
+
+FASE 3:
+- Material engine
+- Commit
+
+FASE 4:
+- Tools básicas (brush, shape, text)
+- Commit
+
+FASE 5:
+- Corte y knife
+- Commit
+
+FASE 6:
+- Undo/Redo
+- Commit
+
+FASE 7:
+- Export
+- Commit
+
+=========================================================
+EMPEZAR AHORA:
+1. Crear módulo card-editor.
+2. Crear CardStore.
+3. Crear navegación interna con back/home.
+4. Implementar capa Background + Border.
+5. Commit.

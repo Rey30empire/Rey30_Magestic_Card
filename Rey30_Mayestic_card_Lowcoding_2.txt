@@ -1,0 +1,329 @@
+Hola Codex. Ya analizaste el repo y creaste un MVP backend (Node.js + TypeScript + SQLite + JWT + Socket.IO) con módulos de auth/roles básicos, cartas con hash, inventario y puntos, duelos vs AI, marketplace y chat. Ahora necesito que agregues un nuevo módulo completo sin romper lo existente.
+
+0) REGLA MÁXIMA
+
+No rompas rutas existentes. No renombres endpoints actuales. No elimines tablas existentes sin migración. No introduzcas placeholders sin lógica (si hay stub, debe estar claro y validado con Zod). Todo debe compilar con npm run check y npm run build.
+
+1) OBJETIVO NUEVO: “AgentCreator System (ACS)”
+
+Implementa un sistema de creación y administración de agentes con:
+
+Agentes (Agent Profiles) con: nombre, rol, detalle, personalidad, lore, rules, skills, tools, provider (ollama/llama.cpp/api), permisos, scopes de memoria, estado (desconectado/conectado/suspendido).
+
+Skills como paquetes versionados: definición + inputs/outputs esperados + herramientas requeridas + tests automáticos.
+
+Rules multi-nivel con prioridades: Global > Project > Agent > Session, enforcement soft/hard.
+
+Tools como acciones reales (no solo texto) con permisos por agente.
+
+1.1) “Agentes desconectados vs conectados”
+
+Un agente puede existir “desconectado” (sin provider) y solo se conecta cuando el usuario elige provider/model y le asigna keys/permisos.
+
+Keys se guardan en un “Vault” (no exponerlas en responses). En MVP, guardar cifrado/obfuscado en SQLite y documentar que en producción va a KMS/Secret Manager.
+
+2) OBJETIVO NUEVO: “Approved Creators Program (Whitelist)”
+
+Crea roles y permisos:
+
+user
+
+creator
+
+approvedCreator
+
+moderator
+
+admin (R33)
+
+Acceso:
+
+ApprovedCreator solo por invitación/código generado por admin.
+
+Creator puede aplicar (pending/approved/rejected/suspended).
+
+Funciones:
+
+Admin panel endpoints: cola de solicitudes, aprobar, rechazar, suspender, generar invite codes, asignar permisos granulares, logs de auditoría.
+
+ApprovedCreator: acceso a herramientas PRO (publicación a marketplace, importación pro, balance tools, etc.) según permisos.
+
+3) REGLA NUEVA: “Desktop Training Gate”
+
+Agregar una regla estricta:
+
+3.1) Entrenamiento pesado (fine-tuning real / LoRA / adapters)
+
+Solo disponible para usuarios en Desktop.
+
+En móvil: permitido “Profile Tuning” (lore + ejemplos + reglas + plantillas) + RAG memory por proyecto.
+
+En desktop: habilitar endpoints para “Training Jobs” SOLO si clientPlatform === desktop.
+
+3.2) Detección de plataforma
+
+Implementa detección por:
+
+Header obligatorio en requests: x-client-platform: desktop | mobile | web
+
+Si no viene, asume web.
+
+Para endpoints sensibles, el server valida y bloquea:
+
+training/* => solo desktop
+
+dev-tools/* => solo approvedCreator con permiso
+
+publish/* => solo approvedCreator con permiso
+
+4) MODULOS NUEVOS A IMPLEMENTAR (Backend)
+
+Implementa nuevos dominios con Zod schemas + rutas + servicios + DB migrations (o inicialización segura):
+
+4.1) Tablas nuevas (SQLite)
+
+roles (si no existe)
+
+permissions
+
+role_permissions
+
+user_roles
+
+creator_applications
+
+invite_codes
+
+audit_logs
+
+agents
+
+agent_connections (provider/model/config)
+
+agent_rules
+
+agent_skills
+
+agent_tools
+
+skills_catalog
+
+skill_tests
+
+global_rules
+
+project_rules (si hay concepto de project en repo; si no, crear projects mínimo)
+
+rag_memories (por user/project/agent)
+
+training_jobs (solo desktop)
+
+Asegura índices por userId y timestamps.
+
+4.2) Endpoints (REST)
+Auth/Users
+
+Mantener existentes.
+
+Agregar:
+
+GET /api/me (incluye roles, permisos, platform detectada)
+
+Creators
+
+POST /api/creators/apply
+
+GET /api/creators/status
+
+POST /api/creators/redeem-invite
+
+GET /api/admin/creators/applications
+
+POST /api/admin/creators/:applicationId/approve
+
+POST /api/admin/creators/:applicationId/reject
+
+POST /api/admin/creators/:creatorId/suspend
+
+POST /api/admin/invites (generate)
+
+GET /api/admin/invites
+
+GET /api/admin/audit-logs
+
+Agents (ACS)
+
+POST /api/agents (crear agente desconectado)
+
+GET /api/agents (listar)
+
+GET /api/agents/:id
+
+PATCH /api/agents/:id (editar identidad/lore/personalidad)
+
+POST /api/agents/:id/connect (elige provider/model + keysRef + params)
+
+POST /api/agents/:id/disconnect
+
+POST /api/agents/:id/suspend
+
+POST /api/agents/:id/duplicate
+
+DELETE /api/agents/:id
+
+Rules
+
+GET/POST /api/rules/global (admin)
+
+GET/POST /api/rules/project (si aplica)
+
+GET/POST /api/agents/:id/rules
+
+Resolver reglas con prioridad y devolver “effectiveRules” para UI.
+
+Skills Catalog
+
+POST /api/skills (admin o approvedCreator con permiso)
+
+GET /api/skills
+
+GET /api/skills/:id
+
+POST /api/skills/:id/tests/run (ejecuta tests)
+
+GET /api/skills/:id/tests
+
+Tools Registry
+
+GET /api/tools (lista de tools soportadas)
+
+POST /api/agents/:id/tools (asignar/quitar tools con permisos)
+
+Memory / RAG
+
+POST /api/memory (guardar)
+
+GET /api/memory (filtrar por scope)
+
+DELETE /api/memory/:id
+
+Training Jobs (DESKTOP ONLY)
+
+POST /api/training/jobs (solo desktop)
+
+GET /api/training/jobs
+
+POST /api/training/jobs/:id/cancel
+
+Este endpoint crea el job y guarda estado. En MVP NO entrenes de verdad; pero sí implementa:
+
+validación de plataforma
+
+validación de permisos
+
+pipeline “simulado” con estados (queued/running/succeeded/failed) y logs
+
+documentación clara: “runner real se implementa en fase posterior”.
+
+5) Seguridad, Anti-abuso, Auditoría
+
+Middleware de:
+
+requireAuth (JWT)
+
+requireRole / requirePermission
+
+requirePlatform(desktop) en training
+
+rateLimit básico (si ya hay, úsalo; si no, agrega simple in-memory)
+
+Logs:
+
+Cada acción admin y publish/training escribe en audit_logs con userId, acción, payload reducido.
+
+6) “Agent Sandbox Arena”
+
+Antes de permitir acciones sensibles (ej: publish o dev tools):
+
+Endpoint: POST /api/agents/:id/sandbox-test
+
+Hace pruebas básicas:
+
+respeta rules hard (no ejecutar tools prohibidas)
+
+no inventar outputs (validación Zod)
+
+no modificar fuera de scope
+
+Guarda resultado en DB.
+
+7) Marketplace de Agentes (Solo Plantillas)
+
+Implementa en marketplace existente (o nuevo subdominio):
+
+ApprovedCreator puede publicar “agent templates” (sin keys ni secretos)
+
+Otros usuarios pueden importar como plantilla (crea agente desconectado basado en template)
+Endpoints:
+
+POST /api/agent-marketplace/templates (approvedCreator)
+
+GET /api/agent-marketplace/templates
+
+POST /api/agent-marketplace/templates/:id/import
+
+8) Documentación y Lowcoding
+
+Actualiza/crea docs en el repo:
+
+docs/LOWCODING_MASTER_UPDATED.md (integra ACS + Approved Creators + Desktop Training Gate)
+
+docs/ACS_SPEC.md (pantallas/botones/flows para Unity UI)
+
+docs/PERMISSIONS_MATRIX.md
+
+docs/ENDPOINTS_ACS.md
+
+README.md (cómo correr, headers x-client-platform, ejemplos curl)
+
+9) Criterios de salida (Definition of Done)
+
+npm run check OK
+
+npm run build OK
+
+Prueba mínima (smoke) documentada:
+
+register/login
+
+crear agente desconectado
+
+conectar agente a provider dummy (sin llamar red real)
+
+crear application creator + generar invite + redeem + rol updated
+
+training job bloqueado en mobile y permitido en desktop (solo crear job)
+
+sandbox-test endpoint responde ok
+
+10) Estructura de código
+
+Mantén estilo del repo:
+
+src/routes/*.routes.ts
+
+src/services/*
+
+src/db/sqlite.ts (agregar migraciones/initializers)
+
+src/middleware/*
+
+src/schemas/* (zod)
+
+src/utils/*
+
+Entrega final:
+
+PR/commit listo, todo compilado, y docs actualizados.
+
+Empieza ejecutando: (1) mapear rutas existentes, (2) definir migración DB incremental, (3) implementar middlewares, (4) endpoints, (5) docs.

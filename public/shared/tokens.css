@@ -1,0 +1,103 @@
+:root {
+  --font-display: "Cormorant Garamond", "Times New Roman", serif;
+  --font-ui: "Manrope", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  --color-bg-1: #07070b;
+  --color-bg-2: #0a0a12;
+  --color-bg-3: #11111c;
+  --color-surface: rgba(15, 16, 26, 0.72);
+  --color-surface-strong: rgba(20, 21, 35, 0.88);
+  --color-border: rgba(255, 220, 145, 0.18);
+  --color-border-strong: rgba(255, 220, 145, 0.38);
+  --color-glow: rgba(255, 214, 126, 0.26);
+  --color-text: #f5ecd8;
+  --color-text-soft: #c5b9a0;
+  --color-text-muted: #9d927f;
+  --color-gold-1: #b9852f;
+  --color-gold-2: #f3cc79;
+  --color-gold-3: #ffdea2;
+  --color-green: #45b887;
+  --color-red: #df6d64;
+  --color-blue: #75a6ff;
+  --color-purple: #9e87ff;
+
+  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.42);
+  --shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.26);
+  --shadow-glow: 0 0 28px rgba(255, 214, 126, 0.22);
+  --focus-ring: 0 0 0 3px rgba(255, 214, 126, 0.26);
+
+  --transition-fast: 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --transition-base: 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  background: var(--color-bg-1);
+}
+
+a {
+  color: inherit;
+}
+
+.app-bg {
+  background:
+    radial-gradient(1200px 600px at 20% 10%, rgba(255, 215, 130, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 80% 30%, rgba(160, 120, 255, 0.1), transparent 55%),
+    linear-gradient(180deg, #07070b 0%, #0a0a12 40%, #07070b 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.app-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  z-index: 0;
+}
+
+.screen-root {
+  position: relative;
+  z-index: 1;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.hidden {
+  display: none !important;
+}
+

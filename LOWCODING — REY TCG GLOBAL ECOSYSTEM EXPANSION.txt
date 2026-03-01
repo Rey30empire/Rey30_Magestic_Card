@@ -1,0 +1,295 @@
+CODEX: IMPLEMENTAR "ReyTCG Global Ecosystem Expansion"
+COMO EXTENSIÓN DEL AI TRANSVERSAL CORE EXISTENTE.
+
+OBJETIVO:
+Crear ecosistema completo que incluya:
+
+- Sistema eSports automático
+- Motor de torneos AI
+- Mercado secundario seguro
+- IA que analiza tendencias sociales
+- Generación automática de cartas inspiradas
+- Universo animado generado por IA
+- Integración con Unreal para producción cinematográfica
+- Arquitectura modular y reversible
+
+=========================================================
+0) REGLAS FUNDAMENTALES
+=========================================================
+
+1. NO modificar CAD ni Card Editor.
+2. NO modificar economía base sin versionado.
+3. Todo nuevo módulo debe estar en:
+   /engine/global-ecosystem
+4. Integración por eventos vía AI transversal.
+5. Cada módulo en su propia branch.
+6. Commit por fase.
+7. Tag de estabilidad por módulo.
+
+=========================================================
+1) ESTRUCTURA GLOBAL
+=========================================================
+
+/src/engine/global-ecosystem
+    esports/
+        EsportsManager.ts
+        LeagueSystem.ts
+        PrizeDistribution.ts
+        BroadcastAI.ts
+    tournaments/
+        TournamentEngine.ts
+        BracketGenerator.ts
+        MatchSimulationAI.ts
+        SpectatorMode.ts
+    secondary-market/
+        MarketplaceEngine.ts
+        AuctionSystem.ts
+        AntiFraudAI.ts
+        PriceAnalytics.ts
+    trend-ai/
+        SocialTrendScanner.ts
+        TrendToCardGenerator.ts
+        SentimentAnalyzer.ts
+    universe/
+        UniverseGenerator.ts
+        CharacterAI.ts
+        EpisodeBuilder.ts
+        DialogueAI.ts
+        AnimationPipeline.ts
+
+=========================================================
+2) SISTEMA eSPORTS AUTOMÁTICO
+=========================================================
+
+EsportsManager:
+
+- Crear temporadas competitivas
+- Generar ligas:
+   - Amateur
+   - Pro
+   - World Championship
+- Calcular clasificación automática
+- Distribuir premios
+
+LeagueSystem:
+
+- División por regiones
+- Sistema de ascenso/descenso
+- Reglas automáticas
+
+PrizeDistribution:
+
+- Calcular premios según ranking
+- Ajustar economía
+
+BroadcastAI:
+
+- Generar comentarios automáticos en tiempo real
+- Generar estadísticas visuales
+- Crear clips destacados automáticamente
+
+=========================================================
+3) MOTOR DE TORNEOS AI
+=========================================================
+
+TournamentEngine:
+
+- Single elimination
+- Double elimination
+- Swiss format
+- Round robin
+
+BracketGenerator:
+
+- Crear brackets balanceados
+- Evitar repetición de matchups
+
+MatchSimulationAI:
+
+- Simular partidas masivas
+- Detectar estrategias dominantes
+- Generar estadísticas públicas
+
+SpectatorMode:
+
+- Vista cinematográfica automática
+- Cámara dinámica
+- Highlights automáticos
+
+=========================================================
+4) SISTEMA DE MERCADO SECUNDARIO
+=========================================================
+
+MarketplaceEngine:
+
+- Compra/venta directa
+- Subastas
+- Historial de precios
+
+AuctionSystem:
+
+- Ofertas en tiempo real
+- Tiempo límite dinámico
+
+AntiFraudAI:
+
+- Detectar manipulación de mercado
+- Detectar bots
+- Detectar pump & dump
+
+PriceAnalytics:
+
+- Curva de valor histórico
+- Rareza vs demanda
+- Sugerir precio óptimo
+
+=========================================================
+5) IA DE TENDENCIAS SOCIALES
+=========================================================
+
+SocialTrendScanner:
+
+- Analizar redes sociales (API externa)
+- Detectar palabras clave emergentes
+- Analizar hashtags
+
+SentimentAnalyzer:
+
+- Determinar sentimiento (positivo/negativo)
+- Medir intensidad
+
+TrendToCardGenerator:
+
+Proceso:
+
+1. Detectar tendencia
+2. Clasificar categoría (meme, evento, cultura, tecnología)
+3. Generar concepto carta
+4. Asignar habilidades temáticas
+5. Balancear con AIBalancer
+6. Enviar a revisión humana opcional
+
+Ejemplo:
+Tendencia: "Inteligencia Artificial"
+→ Carta temática AI
+→ Habilidad: copia habilidad rival
+→ Rareza ajustada por impacto
+
+=========================================================
+6) UNIVERSO EXPANDIDO CON SERIES IA
+=========================================================
+
+UniverseGenerator:
+
+- Crear mundo base
+- Crear facciones
+- Crear conflicto principal
+
+CharacterAI:
+
+- Generar personajes únicos
+- Definir personalidad
+- Asignar habilidades
+
+EpisodeBuilder:
+
+- Generar guion
+- Crear estructura:
+   - introducción
+   - conflicto
+   - clímax
+   - resolución
+
+DialogueAI:
+
+- Diálogos dinámicos
+- Adaptación a eventos reales del meta
+
+AnimationPipeline:
+
+- Exportar escenas a Unreal
+- Generar animatics
+- Controlar cámara
+- Integrar voces AI
+
+=========================================================
+7) INTEGRACIÓN CON AI TRANSVERSAL
+=========================================================
+
+TransversalAI debe:
+
+- Recibir eventos:
+   - tournament_finished
+   - market_spike_detected
+   - new_trend_detected
+   - season_start
+   - championship_winner
+
+- Decidir:
+   - Crear carta inspirada
+   - Ajustar meta
+   - Crear episodio especial
+   - Modificar drop rates
+   - Iniciar evento global
+
+=========================================================
+8) ORDEN DE IMPLEMENTACIÓN
+=========================================================
+
+FASE 1:
+eSports base + torneos
+Commit.
+
+FASE 2:
+Mercado secundario
+Commit.
+
+FASE 3:
+Trend AI + generación de cartas
+Commit.
+
+FASE 4:
+Universo narrativo
+Commit.
+
+FASE 5:
+Integración Unreal animación
+Commit.
+
+=========================================================
+9) CONTROL GIT
+=========================================================
+
+Ramas:
+
+feature/esports
+feature/tournaments
+feature/marketplace
+feature/trend-ai
+feature/universe
+
+Tags:
+
+esports-stable
+market-stable
+trend-ai-stable
+universe-stable
+
+Rollback seguro siempre posible.
+
+=========================================================
+RESULTADO FINAL
+=========================================================
+
+La plataforma debe:
+
+- Organizar torneos automáticamente
+- Simular partidas con AI
+- Ajustar meta dinámicamente
+- Permitir mercado secundario
+- Detectar tendencias sociales
+- Crear cartas inspiradas
+- Generar series animadas
+- Producir trailers en Unreal
+- Coordinar todo con AI transversal
+- Mantener control total vía Git

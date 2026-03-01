@@ -1,0 +1,22 @@
+[
+  { "id": "tpl_keychain", "name": "Keychain", "tags": ["utility", "ring"], "node": { "primitive": "box", "params": { "w": 40, "h": 5, "d": 20 } } },
+  { "id": "tpl_nameplate", "name": "Nameplate", "tags": ["sign", "text"], "node": { "primitive": "text", "params": { "text": "R33", "size": 10, "height": 2, "fontId": "default" } } },
+  { "id": "tpl_box_lid", "name": "Simple Box Lid", "tags": ["container"], "node": { "primitive": "box", "params": { "w": 50, "h": 8, "d": 50 } } },
+  { "id": "tpl_phone_stand", "name": "Phone Stand", "tags": ["desk", "support"], "node": { "primitive": "box", "params": { "w": 65, "h": 12, "d": 85 } } },
+  { "id": "tpl_cable_clip", "name": "Cable Clip", "tags": ["cable"], "node": { "primitive": "cylinder", "params": { "rTop": 6, "rBottom": 6, "h": 16, "radialSegments": 32 } } },
+  { "id": "tpl_hook", "name": "Hook", "tags": ["wall", "hanger"], "node": { "primitive": "cone", "params": { "r": 10, "h": 26, "radialSegments": 32 } } },
+  { "id": "tpl_coin", "name": "Coin", "tags": ["round", "token"], "node": { "primitive": "cylinder", "params": { "rTop": 18, "rBottom": 18, "h": 3, "radialSegments": 48 } } },
+  { "id": "tpl_gear_basic", "name": "Gear Basic", "tags": ["mechanic"], "node": { "primitive": "cylinder", "params": { "rTop": 20, "rBottom": 20, "h": 6, "radialSegments": 24 } } },
+  { "id": "tpl_ring", "name": "Ring", "tags": ["wearable"], "node": { "primitive": "cylinder", "params": { "rTop": 12, "rBottom": 12, "h": 5, "radialSegments": 48 } } },
+  { "id": "tpl_badge", "name": "Badge", "tags": ["logo"], "node": { "primitive": "box", "params": { "w": 48, "h": 4, "d": 34 } } },
+  { "id": "tpl_trophy_base", "name": "Trophy Base", "tags": ["award"], "node": { "primitive": "box", "params": { "w": 58, "h": 12, "d": 58 } } },
+  { "id": "tpl_funnel", "name": "Funnel", "tags": ["kitchen"], "node": { "primitive": "cone", "params": { "r": 22, "h": 40, "radialSegments": 32 } } },
+  { "id": "tpl_knob", "name": "Knob", "tags": ["hardware"], "node": { "primitive": "sphere", "params": { "r": 12, "widthSegments": 32, "heightSegments": 16 } } },
+  { "id": "tpl_spacer", "name": "Spacer", "tags": ["mechanic"], "node": { "primitive": "cylinder", "params": { "rTop": 8, "rBottom": 8, "h": 10, "radialSegments": 24 } } },
+  { "id": "tpl_washer", "name": "Washer", "tags": ["mechanic"], "node": { "primitive": "cylinder", "params": { "rTop": 14, "rBottom": 14, "h": 3, "radialSegments": 36 } } },
+  { "id": "tpl_handle", "name": "Handle", "tags": ["furniture"], "node": { "primitive": "box", "params": { "w": 70, "h": 10, "d": 14 } } },
+  { "id": "tpl_arch", "name": "Arch", "tags": ["decor"], "node": { "primitive": "box", "params": { "w": 60, "h": 35, "d": 10 } } },
+  { "id": "tpl_stamp", "name": "Stamp", "tags": ["text", "tool"], "node": { "primitive": "text", "params": { "text": "STAMP", "size": 7, "height": 4, "fontId": "default" } } },
+  { "id": "tpl_fin", "name": "Fin", "tags": ["aero"], "node": { "primitive": "cone", "params": { "r": 8, "h": 25, "radialSegments": 3 } } },
+  { "id": "tpl_token", "name": "Token", "tags": ["game"], "node": { "primitive": "sphere", "params": { "r": 9, "widthSegments": 24, "heightSegments": 12 } } }
+]

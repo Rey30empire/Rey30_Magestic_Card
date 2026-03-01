@@ -1,0 +1,358 @@
+CODEX: IMPLEMENTAR “ReyCAD Battle Render Engine” COMO MÓDULO SEPARADO,
+SIN ROMPER EL MOTOR CAD EXISTENTE.
+
+OBJETIVO:
+Agregar un motor de render cinematográfico para cartas con:
+- Escena de duelo entre 2 cartas
+- Cámara dinámica
+- Animaciones
+- Sistema de partículas
+- Timeline
+- Export imagen / video
+- Total separación del CAD
+- Git version control automático y seguro
+
+=========================================================
+0) REGLAS CRÍTICAS (NO ROMPER NADA)
+=========================================================
+
+1. NO modificar engine CAD core.
+2. Crear módulo completamente separado: /engine/battle
+3. No tocar scenegraph base.
+4. Battle Engine usa snapshot GLB/mesh del CAD.
+5. Export CAD ignora Battle Engine.
+6. Battle mode se activa como "Scene Mode".
+
+=========================================================
+1) CONFIGURAR GIT PROFESIONAL ANTES DE EMPEZAR
+=========================================================
+
+EJECUTAR:
+
+git init
+git add .
+git commit -m "Stable CAD Engine before Battle Mode"
+
+Crear rama nueva:
+
+git checkout -b feature/battle-render-engine
+
+Configurar seguridad:
+
+.gitignore incluir:
+node_modules
+dist
+.env
+*.log
+*.webm
+*.mp4
+renders/
+exports/
+
+Activar protección básica:
+
+git config core.autocrlf true
+git config pull.rebase false
+
+Crear script npm:
+
+"scripts": {
+  "savepoint": "git add . && git commit -m \"SAVEPOINT\""
+}
+
+Cada fase completada debe ejecutar:
+npm run savepoint
+
+=========================================================
+2) DEPENDENCIAS NUEVAS
+=========================================================
+
+Instalar:
+
+npm install @react-three/postprocessing postprocessing
+npm install three
+npm install @react-spring/three
+npm install zustand
+npm install uuid
+
+Opcional partículas avanzadas:
+npm install three.quarks
+
+Guardar commit:
+
+git add .
+git commit -m "Battle engine dependencies installed"
+
+=========================================================
+3) ESTRUCTURA NUEVA
+=========================================================
+
+Crear:
+
+/src/engine/battle
+    BattleScene.tsx
+    BattleCamera.ts
+    CardActor.ts
+    ArenaEnvironment.ts
+    VFXManager.ts
+    ParticleSystem.ts
+    Timeline.ts
+    BattleStore.ts
+    RenderPipeline.ts
+
+/src/ui/panels
+    BattlePanel.tsx
+
+=========================================================
+4) BATTLE STORE (ESTADO AISLADO)
+=========================================================
+
+BattleStore.ts:
+
+- mode: "idle" | "duel" | "cinematic"
+- actors: Record<string, CardActor>
+- timelineState
+- cameraState
+- vfxGlobalEnabled
+- playing: boolean
+
+NO usar estado CAD aquí.
+
+=========================================================
+5) CARD ACTOR
+=========================================================
+
+CardActor debe contener:
+
+- id
+- mesh (THREE.Object3D)
+- stats {hp, attack}
+- currentAnimation
+- vfxStack
+- position
+- rotation
+
+Métodos:
+- enterScene()
+- playAttack()
+- receiveDamage()
+- explodeParticles()
+- idleFloat()
+
+=========================================================
+6) ARENA ENVIRONMENT
+=========================================================
+
+ArenaEnvironment.ts:
+
+- Crear plataforma circular
+- HDRI environment
+- Luces dramáticas:
+    - key light
+    - rim light
+    - fill light
+- Fog suave
+- Bloom ligero
+
+Usar @react-three/postprocessing:
+
+<EffectComposer>
+   <Bloom />
+   <DepthOfField />
+   <Vignette />
+</EffectComposer>
+
+=========================================================
+7) BATTLE CAMERA
+=========================================================
+
+BattleCamera.ts:
+
+Funciones:
+
+- zoomTo(actor)
+- orbitAround(actor)
+- cinematicCut(position, lookAt)
+- shake(intensity, duration)
+- introDuel()
+
+NO usar OrbitControls.
+Control manual de cámara.
+
+=========================================================
+8) PARTICLE SYSTEM
+=========================================================
+
+ParticleSystem.ts:
+
+Implementar 3 tipos:
+
+1) AuraEmitter
+   - Partículas orbitando carta
+
+2) ImpactExplosion
+   - InstancedMesh partículas radiales
+
+3) DissolveEffect
+   - Convertir mesh a Points
+   - Animar dispersión con noise
+
+IMPORTANTE:
+- No destruir mesh original.
+- Solo ocultar temporalmente en preview.
+
+=========================================================
+9) TIMELINE
+=========================================================
+
+Timeline.ts:
+
+Sistema simple basado en tiempo:
+
+type TimelineEvent = {
+   time: number
+   action: () => void
+}
+
+Timeline:
+- events[]
+- play()
+- stop()
+- reset()
+
+Escena duelo ejemplo:
+
+0s: camera intro
+1s: actors enter
+2s: aura activate
+3s: attack actor A
+4s: camera shake
+5s: impact explosion
+6s: actor B damage
+7s: dissolve preview
+8s: fade out
+
+=========================================================
+10) BATTLE SCENE
+=========================================================
+
+BattleScene.tsx:
+
+- Render Canvas separado del CAD
+- Importar snapshot de cartas (mesh clonados)
+- Crear 2 CardActors
+- Posicionarlos izquierda/derecha
+- Iniciar Timeline
+
+Debe poder activarse desde UI:
+
+if (battleModeEnabled)
+   render <BattleScene />
+else
+   render <EditorRoot />
+
+=========================================================
+11) RENDER PIPELINE EXPORT
+=========================================================
+
+RenderPipeline.ts:
+
+Funciones:
+
+- captureImage():
+   renderer.render(scene, camera)
+   return canvas.toDataURL()
+
+- recordVideo(duration):
+   usar MediaRecorder API
+   export webm
+
+Desktop:
+- export PNG sequence
+- guardar en /renders/
+
+=========================================================
+12) UI PANEL
+=========================================================
+
+BattlePanel.tsx:
+
+Botones:
+
+- Start Duel
+- Stop
+- Export Image
+- Record Video
+- Toggle Particles
+- Toggle Cinematic Mode
+
+=========================================================
+13) GIT CONTROL ESTRICTO POR FASES
+=========================================================
+
+FASE 1:
+Estructura + store
+git commit -m "Battle engine base structure"
+
+FASE 2:
+Arena + camera
+git commit -m "Arena and cinematic camera"
+
+FASE 3:
+CardActor + basic animation
+git commit -m "Card actor animation system"
+
+FASE 4:
+Particles
+git commit -m "Particle system integrated"
+
+FASE 5:
+Timeline
+git commit -m "Battle timeline implemented"
+
+FASE 6:
+Export pipeline
+git commit -m "Render export system"
+
+=========================================================
+14) SI ALGO SE ROMPE
+=========================================================
+
+Ver commits:
+
+git log --oneline
+
+Volver atrás:
+
+git checkout <commit-id>
+
+O reset duro:
+
+git reset --hard <commit-id>
+
+O eliminar rama:
+
+git checkout main
+git branch -D feature/battle-render-engine
+
+=========================================================
+15) RESULTADO FINAL ESPERADO
+=========================================================
+
+Debe permitir:
+
+- Cargar 2 cartas creadas en CAD
+- Renderizarlas en arena
+- Animarlas
+- Ataque con partículas
+- Cámara cinematográfica
+- Exportar imagen/video
+- No afectar export CAD
+- Poder volver atrás con git
+
+=========================================================
+EMPEZAR AHORA:
+1. Crear rama nueva.
+2. Crear estructura.
+3. Implementar BattleStore.
+4. Commit.

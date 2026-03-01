@@ -1,0 +1,333 @@
+CODEX: IMPLEMENTAR "Card Design Pro Expansion" 
+COMO EXTENSIÓN MODULAR DEL Card Design Engine EXISTENTE.
+
+OBJETIVO:
+Agregar capacidades avanzadas sin modificar núcleo estable:
+- Vector Engine tipo Illustrator
+- Shader holográfico realista
+- Foil animado
+- Marcos legendarios paramétricos
+- Modo impresión profesional
+- Marketplace de cartas
+- Versionado Git estructurado y seguro
+
+=========================================================
+0) REGLAS CRÍTICAS DE SEGURIDAD
+=========================================================
+
+1. NO modificar archivos del CAD core.
+2. NO modificar Battle Engine.
+3. NO modificar CardEditor base directamente.
+4. Crear módulo de expansión separado:
+   /engine/card-pro
+5. Integrar por feature flag:
+   enableCardPro: boolean
+6. Usar branches por feature.
+7. Commit por cada fase.
+8. Crear tags de estabilidad.
+
+=========================================================
+1) CONFIGURACIÓN GIT PROFESIONAL
+=========================================================
+
+ANTES DE EMPEZAR:
+
+git checkout main
+git pull
+git checkout -b feature/card-pro-expansion
+git tag stable-card-editor-v1
+
+Activar guardado frecuente:
+
+npm run savepoint
+
+Crear ramas por módulo:
+
+git checkout -b feature/vector-engine
+git checkout -b feature/holographic-shader
+git checkout -b feature/foil-animation
+git checkout -b feature/legendary-frames
+git checkout -b feature/print-mode
+git checkout -b feature/marketplace
+
+Al finalizar cada módulo:
+git merge feature/<modulo>
+git tag card-pro-<modulo>-stable
+
+=========================================================
+2) ESTRUCTURA NUEVA
+=========================================================
+
+/src/engine/card-pro
+    vector/
+        VectorCanvas.ts
+        VectorPath.ts
+        VectorRenderer.ts
+        VectorTools.ts
+        BooleanOps.ts
+    shaders/
+        HolographicMaterial.ts
+        FoilShader.ts
+        EdgeGlowShader.ts
+    frames/
+        LegendaryFrameGenerator.ts
+        FrameTemplates.ts
+    print/
+        PrintLayout.ts
+        CMYKConverter.ts
+        BleedEngine.ts
+        CropMarks.ts
+    marketplace/
+        MarketplaceAPI.ts
+        CardUploader.ts
+        CardPreviewGenerator.ts
+        LicenseManager.ts
+    versioning/
+        CardVersionManager.ts
+
+=========================================================
+3) VECTOR ENGINE TIPO ILLUSTRATOR
+=========================================================
+
+Implementar sistema vectorial basado en:
+
+- Paths (Bezier curves)
+- Anchor points
+- Handles
+- Boolean operations:
+   - union
+   - subtract
+   - intersect
+   - exclude
+
+VectorPath:
+- id
+- points[]
+- closed: boolean
+- fillMaterial
+- strokeMaterial
+- strokeWidth
+
+Herramientas nuevas:
+
+- Pen Tool
+- Direct Selection
+- Path Boolean Tool
+- Anchor Add/Delete
+- Stroke Width Tool
+
+Render:
+- SVG-like engine
+- O convertir a canvas path
+- O WebGL vector triangulation
+
+Integración:
+- Vector layer debe coexistir con raster layer.
+
+=========================================================
+4) MOTOR DE SHADERS HOLOGRÁFICOS
+=========================================================
+
+HolographicMaterial.ts:
+
+Shader debe incluir:
+
+- Iridescent color shift
+- Fresnel edge glow
+- Rainbow spectrum ramp
+- View-angle color variation
+- Subtle noise animation
+
+Uniforms:
+- time
+- intensity
+- hueShift
+- shimmerSpeed
+- foilPatternTexture
+
+Aplicación:
+- Solo en capas tipo "foil"
+- Toggle desde panel material
+
+=========================================================
+5) SISTEMA FOIL ANIMADO
+=========================================================
+
+FoilShader.ts:
+
+Implementar:
+
+- Scanning light band
+- Rotating shimmer
+- Noise displacement
+- Maskable foil zones
+
+Debe permitir:
+- Aplicar solo a áreas específicas
+- Usar stencil mask
+- Ajustar velocidad
+
+=========================================================
+6) MARCOS LEGENDARIOS PARAMÉTRICOS
+=========================================================
+
+LegendaryFrameGenerator:
+
+Debe generar:
+
+- Dragon style
+- Arcane style
+- Cosmic style
+- Shadow style
+- Gold embossed style
+
+Parámetros:
+- complexity
+- edge thickness
+- ornament density
+- glow level
+- gem inserts
+
+Implementar generador procedural:
+- Curvas
+- Ornamentos repetidos
+- Simetría automática
+
+=========================================================
+7) MODO IMPRESIÓN PROFESIONAL
+=========================================================
+
+PrintLayout.ts:
+
+Soportar:
+
+- Bleed (3mm default)
+- Safe area
+- Trim line
+- Crop marks
+- CMYK preview
+- DPI selector (300dpi default)
+- Print size presets (63x88mm card standard)
+
+CMYKConverter:
+- Simulación conversión RGB -> CMYK
+- Warning colores fuera de gama
+
+Export:
+- PDF print-ready
+- PNG 300dpi
+- TIFF opcional
+
+=========================================================
+8) MARKETPLACE DE CARTAS
+=========================================================
+
+MarketplaceAPI:
+
+Funciones:
+
+- uploadCard(metadata, previewImage, file)
+- listCards()
+- downloadCard(id)
+- rateCard(id)
+- purchaseCard(id)
+
+CardUploader:
+- Validar tamaño
+- Validar licencia
+- Crear thumbnail automático
+- Watermark preview
+
+LicenseManager:
+- Free
+- Personal
+- Commercial
+- NFT-style optional
+
+=========================================================
+9) VERSIONADO INTERNO DE CARTAS
+=========================================================
+
+CardVersionManager:
+
+- Cada guardado crea snapshot
+- Permitir revertir versión
+- Guardar diff
+- Mostrar historial
+
+Estructura:
+
+card.json
+card_v1.json
+card_v2.json
+...
+
+=========================================================
+10) INTEGRACIÓN CON BATTLE ENGINE
+=========================================================
+
+Debe permitir:
+
+- Aplicar holographic shader en duelo
+- Animar foil durante ataque
+- Marcos legendarios brillan en cinematic
+
+Pero sin modificar Battle core:
+Solo exponer materiales compatibles.
+
+=========================================================
+11) ORDEN DE IMPLEMENTACIÓN SEGURO
+=========================================================
+
+FASE 1: Vector Engine
+Commit.
+
+FASE 2: Shader holográfico
+Commit.
+
+FASE 3: Foil animado
+Commit.
+
+FASE 4: Marcos legendarios
+Commit.
+
+FASE 5: Modo impresión
+Commit.
+
+FASE 6: Marketplace
+Commit.
+
+FASE 7: Version manager
+Commit.
+
+=========================================================
+12) SI ALGO SE ROMPE
+=========================================================
+
+Ver commits:
+git log --oneline
+
+Volver a versión estable:
+git checkout stable-card-editor-v1
+
+Reset duro:
+git reset --hard <commit-id>
+
+Eliminar módulo problemático:
+git branch -D feature/<module>
+
+=========================================================
+RESULTADO FINAL
+=========================================================
+
+La app debe permitir:
+
+- Diseño vectorial avanzado
+- Aplicar foil holográfico real
+- Crear marcos legendarios
+- Exportar impresión profesional
+- Publicar en marketplace
+- Versionado interno por carta
+- Integración con Battle Mode
+- Sin afectar CAD
+- Con rollback Git seguro

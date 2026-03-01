@@ -1,0 +1,325 @@
+CODEX: IMPLEMENTAR "ReyTCG Advanced System"
+COMO MÓDULO COMPLETAMENTE SEPARADO DEL CAD Y CARD EDITOR.
+
+OBJETIVO:
+Crear sistema profesional TCG con:
+- Shader holográfico ultra realista
+- Rareza dinámica
+- Foil reactivo
+- Online competitivo
+- Blockchain opcional
+- AI balancing engine
+- AI gameplay assistant
+
+=========================================================
+0) REGLAS ABSOLUTAS
+=========================================================
+
+1. NO modificar CAD core.
+2. NO modificar Card Editor base.
+3. Crear módulo nuevo:
+   /engine/tcg-advanced
+4. Integración por adapters.
+5. Todo debe ser reversible vía Git.
+6. Usar feature flags:
+   enableTCGAdvanced
+
+=========================================================
+1) ESTRUCTURA NUEVA
+=========================================================
+
+/src/engine/tcg-advanced
+    shaders/
+        PokemonStyleHoloShader.ts
+        RainbowSecretShader.ts
+        MouseReactiveFoil.ts
+    rarity/
+        RaritySystem.ts
+        RarityVisuals.ts
+    gameplay/
+        MatchEngine.ts
+        DamageResolver.ts
+        AbilitySystem.ts
+    online/
+        MultiplayerServer.ts
+        Matchmaking.ts
+        RankingSystem.ts
+    blockchain/
+        NFTMinting.ts
+        WalletConnector.ts
+    ai/
+        AIBalancer.ts
+        AIGameplayAssistant.ts
+        AIDeckOptimizer.ts
+    analytics/
+        MetaAnalyzer.ts
+    store/
+        TCGStore.ts
+
+=========================================================
+2) SHADERS HOLOGRÁFICOS ULTRA REALISTAS
+=========================================================
+
+PokemonStyleHoloShader debe incluir:
+
+- Fresnel rim lighting
+- Iridescent color shift
+- Rainbow gradient sweep
+- Micro foil noise pattern
+- UV distortion shimmer
+- Light scanning band
+
+Uniforms:
+- time
+- viewAngle
+- mousePosition
+- rarityLevel
+- shimmerIntensity
+- rainbowStrength
+
+Implementar:
+- vertex shader (normal + fresnel)
+- fragment shader (HSV shift + rainbow ramp)
+- optional texture mask
+
+=========================================================
+3) SISTEMA DE RAREZA
+=========================================================
+
+Rarity types:
+
+COMMON
+UNCOMMON
+RARE
+ULTRA_RARE
+SECRET
+LEGENDARY
+MYTHIC
+
+RaritySystem debe:
+
+- Asignar rareza por metadata
+- Aplicar shader específico
+- Ajustar marco automáticamente
+- Agregar efectos exclusivos
+
+Ejemplo:
+COMMON → sin holo
+RARE → holo básico
+ULTRA_RARE → holo + foil
+SECRET → rainbow holo + animated foil
+LEGENDARY → animated aura + glow + particles
+
+=========================================================
+4) FOIL REACTIVO AL MOUSE
+=========================================================
+
+MouseReactiveFoil.ts:
+
+- Detectar posición mouse en carta
+- Calcular vector view
+- Ajustar brillo dinámicamente
+- Simular reflexión real
+
+Efecto:
+- Cuando mueves el mouse,
+  la carta cambia brillo como foil físico real.
+
+Debe funcionar en:
+- Card Editor
+- Battle Engine
+
+=========================================================
+5) SISTEMA COMPETITIVO ONLINE
+=========================================================
+
+MatchEngine:
+
+- Turn system
+- Mana system
+- Attack/Defense resolution
+- Status effects
+
+Matchmaking:
+
+- ELO ranking
+- Casual mode
+- Ranked mode
+
+MultiplayerServer:
+
+- WebSocket server
+- Sync game state
+- Authoritative server logic
+
+RankingSystem:
+
+- ELO formula
+- Season resets
+- Leaderboard
+
+=========================================================
+6) INTEGRACIÓN BLOCKCHAIN (OPCIONAL)
+=========================================================
+
+Feature flag:
+enableBlockchain
+
+WalletConnector:
+
+- MetaMask integration
+- Phantom optional
+
+NFTMinting:
+
+- Mint card metadata
+- Store IPFS hash
+- Royalty config
+
+Card metadata:
+- cardId
+- rarity
+- owner
+- stats
+- artworkHash
+
+Blockchain no debe ser obligatorio para usar la app.
+
+=========================================================
+7) AI BALANCER ENGINE
+=========================================================
+
+AIBalancer.ts:
+
+Funciones:
+
+- simulateMatches(deckA, deckB, runs=1000)
+- evaluateCardPower(card)
+- adjustStats(card)
+- suggestBalancePatch()
+
+Usar:
+
+- Monte Carlo simulation
+- Heurística de winrate
+- Cost vs Power analysis
+
+MetaAnalyzer:
+
+- Detectar cartas dominantes
+- Detectar combos rotos
+- Sugerir nerf/buff
+
+=========================================================
+8) AI GAMEPLAY ASSISTANT
+=========================================================
+
+AIGameplayAssistant:
+
+- Suggest best move
+- Predict opponent move
+- Recommend combo
+- Explain strategy
+
+Integración con AI:
+
+- Tool: getGameState
+- Tool: simulateTurn
+- Tool: evaluateBoard
+
+=========================================================
+9) AI DECK OPTIMIZER
+=========================================================
+
+AIDeckOptimizer:
+
+- Analiza sinergias
+- Sugiere mejoras
+- Optimiza curva de mana
+- Detecta debilidades
+
+=========================================================
+10) INTEGRACIÓN AI CON TOOL BRIDGE
+=========================================================
+
+Extender aiBridge:
+
+Nuevos tools:
+
+- simulate_match
+- evaluate_card
+- optimize_deck
+- suggest_balance
+- get_meta_report
+
+AI debe responder:
+- PLAN
+- Tool calls
+- Summary
+
+=========================================================
+11) ORDEN SEGURO DE IMPLEMENTACIÓN
+=========================================================
+
+FASE 1:
+Shader holográfico
+Commit.
+
+FASE 2:
+Sistema rareza
+Commit.
+
+FASE 3:
+Foil reactivo
+Commit.
+
+FASE 4:
+MatchEngine local
+Commit.
+
+FASE 5:
+Online multiplayer
+Commit.
+
+FASE 6:
+AI balancer
+Commit.
+
+FASE 7:
+AI gameplay assistant
+Commit.
+
+FASE 8:
+Blockchain opcional
+Commit.
+
+=========================================================
+12) SEGURIDAD Y VERSIONADO
+=========================================================
+
+Antes de cada fase:
+
+git commit -m "Checkpoint before <feature>"
+
+Si falla:
+
+git reset --hard <previous_commit>
+
+Mantener rama main limpia.
+Merge solo cuando estable.
+
+=========================================================
+RESULTADO FINAL
+=========================================================
+
+La app debe permitir:
+
+- Crear carta legendaria con holo realista
+- Foil que reacciona al mouse
+- Sistema competitivo online
+- AI que balancea el juego
+- AI que sugiere jugadas
+- AI que optimiza mazos
+- Marketplace + NFT opcional
+- Todo modular
+- Rollback seguro vía Git

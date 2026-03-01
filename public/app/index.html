@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rey30 Mayestic Card App Shell</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg" />
+    <link rel="stylesheet" href="/shared/tokens.css" />
+    <link rel="stylesheet" href="/shared/ui.css" />
+    <link rel="stylesheet" href="/app/app.css" />
+  </head>
+  <body class="app-bg">
+    <div class="screen-root app-layout">
+      <aside class="ui-glass app-sidebar" id="app-sidebar">
+        <div class="app-brand">
+          <p class="ui-kicker">Imperial Command</p>
+          <h1 class="ui-heading">Rey30 Mayestic</h1>
+          <p class="app-brand-copy">Controla gameplay, ACS y operaciones en un solo shell.</p>
+        </div>
+
+        <nav class="app-nav" id="app-nav">
+          <button class="app-nav-item active" data-section="home">Home</button>
+          <button class="app-nav-item" data-section="reystorage">Reystorage</button>
+          <button class="app-nav-item" data-section="inventario">Inventario</button>
+          <button class="app-nav-item" data-section="duelos">Duelos</button>
+          <button class="app-nav-item" data-section="editor">Editor</button>
+          <button class="app-nav-item" data-section="agents">Agents (ACS)</button>
+          <button class="app-nav-item" data-section="creators">Creators (Approved)</button>
+          <button class="app-nav-item" data-section="settings">Settings (AI Config)</button>
+        </nav>
+
+        <div class="app-sidebar-footer">
+          <span class="ui-badge warning">Imperial Dark Gold</span>
+          <p class="mono">Grid 8px · Glassmorphism</p>
+        </div>
+      </aside>
+
+      <button id="app-sidebar-overlay" class="app-sidebar-overlay" aria-label="Close navigation"></button>
+
+      <main class="app-main">
+        <header class="ui-glass app-topbar">
+          <div class="app-topbar-left">
+            <button
+              id="app-nav-toggle"
+              class="ui-btn ui-btn-ghost app-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              aria-controls="app-sidebar"
+              aria-expanded="false"
+            >
+              Menu
+            </button>
+            <span class="app-health-pill">
+              <span class="health-dot" aria-hidden="true"></span>
+              <span id="app-health-badge" class="ui-badge info">Backend checking...</span>
+            </span>
+            <span id="app-clock" class="mono app-clock">--:--:--</span>
+          </div>
+          <div class="app-topbar-right">
+            <div id="app-profile-mini" class="app-profile-mini">
+              <span class="app-avatar">?</span>
+              <div>
+                <strong>Guest</strong>
+                <p>No session</p>
+              </div>
+            </div>
+            <button id="app-auth-btn" class="ui-btn ui-btn-secondary" data-open-modal="app-auth-modal">Sign In</button>
+            <a class="ui-btn ui-btn-secondary" href="/reycad">Open ReyCAD</a>
+            <a class="ui-btn ui-btn-primary" href="/console">Open Console</a>
+          </div>
+        </header>
+
+        <section class="app-panel active" data-panel="home">
+          <div class="app-home-grid">
+            <article class="ui-glass ui-card app-hero-card">
+              <div class="app-card-head">
+                <div>
+                  <p class="ui-kicker">Featured Card</p>
+                  <h2 class="ui-heading">Imperial Showcase</h2>
+                </div>
+                <span class="ui-badge success">Live Sync</span>
+              </div>
+
+              <div class="app-hero-content">
+                <div class="featured-card-frame rarity-legendary" id="featured-card-frame">
+                  <div class="featured-card-inner">
+                    <p class="mono featured-rarity" id="featured-rarity">legendary</p>
+                    <h2 class="ui-heading" id="featured-name">Imperial Sentinel</h2>
+                    <p id="featured-class">Class: guardian</p>
+                    <div class="featured-stats">
+                      <span>ATK <strong id="featured-atk">12</strong></span>
+                      <span>DEF <strong id="featured-def">14</strong></span>
+                      <span>SPD <strong id="featured-spd">6</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="app-hero-copy">
+                  <h3 class="ui-heading">Dark Gold Tactical Preview</h3>
+                  <p>
+                    El shell integra estado backend, cuenta, inventario, marketplace, memoria y agentes en tiempo real.
+                    Todo el flujo operativo vive dentro de esta vista principal.
+                  </p>
+                  <p class="mono" id="featured-meta">Waiting for data...</p>
+                </div>
+              </div>
+            </article>
+
+            <article class="ui-glass ui-card app-metrics-card">
+              <div class="app-card-head">
+                <h2 class="ui-heading">Pulse</h2>
+                <span class="ui-badge info">Session</span>
+              </div>
+              <div class="metric-grid">
+                <div class="metric-item">
+                  <p>Owned Cards</p>
+                  <strong id="home-stat-cards">0</strong>
+                </div>
+                <div class="metric-item">
+                  <p>Training Jobs</p>
+                  <strong id="home-stat-jobs">0</strong>
+                </div>
+                <div class="metric-item">
+                  <p>Memories</p>
+                  <strong id="home-stat-memories">0</strong>
+                </div>
+                <div class="metric-item">
+                  <p>Agents</p>
+                  <strong id="home-stat-agents">0</strong>
+                </div>
+              </div>
+            </article>
+
+            <article class="ui-glass ui-card app-actions-card">
+              <div class="app-card-head">
+                <h2 class="ui-heading">Quick Actions</h2>
+                <span class="ui-badge info">Product Flow</span>
+              </div>
+              <div class="quick-actions-grid">
+                <button id="app-create-deck-btn" class="ui-btn ui-btn-primary">Create Deck</button>
+                <button
+                  id="app-duel-btn"
+                  class="ui-btn ui-btn-secondary ui-tooltip"
+                  data-tooltip="Necesitas cartas propias para iniciar duelo"
+                  disabled
+                >
+                  Start Duel
+                </button>
+                <button id="app-open-editor-btn" class="ui-btn ui-btn-ghost">Open Editor</button>
+              </div>
+            </article>
+
+            <article class="ui-glass ui-card app-activity-card">
+              <div class="app-card-head">
+                <h2 class="ui-heading">Activity Feed</h2>
+                <button id="app-feed-refresh-btn" class="ui-btn ui-btn-ghost">Refresh</button>
+              </div>
+              <ul id="app-activity-list" class="activity-list"></ul>
+            </article>
+
+            <article class="ui-glass ui-card app-jobs-card">
+              <div class="app-card-head">
+                <h2 class="ui-heading">Training Pulse</h2>
+                <span class="ui-badge warning">Queue</span>
+              </div>
+              <ul id="home-jobs-list" class="activity-list compact-list"></ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="app-panel" data-panel="reystorage">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Reystorage</h2>
+              <div class="head-actions">
+                <span id="memory-count" class="ui-badge info">0 memories</span>
+                <button id="memory-refresh-btn" class="ui-btn ui-btn-ghost">Refresh</button>
+              </div>
+            </div>
+
+            <div class="section-grid section-grid-2">
+              <form id="memory-form" class="app-form-block auth-gated">
+                <h3>Create Memory</h3>
+                <label class="ui-field">
+                  <span class="ui-label">Scope</span>
+                  <select id="memory-scope" class="ui-select">
+                    <option value="user">user</option>
+                    <option value="project">project</option>
+                    <option value="agent">agent</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Project ID (optional)</span>
+                  <input id="memory-project-id" class="ui-input mono" type="text" />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Agent ID (optional)</span>
+                  <input id="memory-agent-id" class="ui-input mono" type="text" />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Text</span>
+                  <textarea id="memory-text" class="ui-textarea" rows="4" required></textarea>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Metadata JSON</span>
+                  <textarea id="memory-metadata" class="ui-textarea mono" rows="3">{}</textarea>
+                </label>
+                <button class="ui-btn ui-btn-primary" type="submit">Save Memory</button>
+              </form>
+
+              <div class="panel-stack">
+                <h3>Stored Memories</h3>
+                <ul id="memory-list" class="activity-list compact-list"></ul>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="app-panel" data-panel="inventario">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Inventario</h2>
+              <div class="head-actions">
+                <span id="inventory-count" class="ui-badge info">0 cards</span>
+                <button id="inventory-refresh-btn" class="ui-btn ui-btn-ghost">Refresh</button>
+              </div>
+            </div>
+
+            <div class="section-grid section-grid-2">
+              <div class="panel-stack">
+                <h3>Your Cards</h3>
+                <ul id="inventory-card-list" class="activity-list compact-list"></ul>
+              </div>
+
+              <div class="panel-stack">
+                <form id="listing-form" class="app-form-block auth-gated">
+                  <h3>Create Marketplace Listing</h3>
+                  <label class="ui-field">
+                    <span class="ui-label">Card</span>
+                    <select id="listing-card-id" class="ui-select"></select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Price Credits</span>
+                    <input id="listing-price" class="ui-input" type="number" min="1" max="1000" value="10" required />
+                  </label>
+                  <button class="ui-btn ui-btn-primary" type="submit">Publish Listing</button>
+                </form>
+
+                <h3>Marketplace Live</h3>
+                <ul id="market-listing-list" class="activity-list compact-list"></ul>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="app-panel" data-panel="duelos">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Duelos</h2>
+              <span class="ui-badge info">Arena</span>
+            </div>
+
+            <div class="section-grid section-grid-2">
+              <form id="duel-form" class="app-form-block auth-gated">
+                <h3>Quick Duel vs AI</h3>
+                <label class="ui-field">
+                  <span class="ui-label">AI Level</span>
+                  <select id="duel-ai-level" class="ui-select">
+                    <option value="novato">novato</option>
+                    <option value="guerrero">guerrero</option>
+                    <option value="dragon">dragon</option>
+                    <option value="maestra">maestra</option>
+                  </select>
+                </label>
+                <div>
+                  <p class="ui-label">Select Cards (1-10)</p>
+                  <div id="duel-card-pool" class="check-grid"></div>
+                </div>
+                <button id="duel-start-btn" class="ui-btn ui-btn-primary" type="submit">Start Duel</button>
+              </form>
+
+              <div class="panel-stack">
+                <h3>Last Duel Result</h3>
+                <div id="duel-result" class="result-card">
+                  <p class="mono">No duel executed yet.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="app-panel" data-panel="editor">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Editor</h2>
+              <span class="ui-badge warning">Live</span>
+            </div>
+
+            <div class="section-grid section-grid-2">
+              <form id="card-create-form" class="app-form-block auth-gated">
+                <h3>Create Card</h3>
+                <label class="ui-field">
+                  <span class="ui-label">Name</span>
+                  <input id="card-name" class="ui-input" type="text" minlength="3" maxlength="48" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Rarity</span>
+                  <select id="card-rarity" class="ui-select">
+                    <option value="common">common</option>
+                    <option value="rare">rare</option>
+                    <option value="epic">epic</option>
+                    <option value="legendary">legendary</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Class</span>
+                  <input id="card-class" class="ui-input" type="text" minlength="2" maxlength="32" value="guardian" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Abilities (comma separated)</span>
+                  <input id="card-abilities" class="ui-input" type="text" value="shield wall" required />
+                </label>
+                <div class="inline-grid-2">
+                  <label class="ui-field">
+                    <span class="ui-label">Summon Cost</span>
+                    <input id="card-summon-cost" class="ui-input" type="number" min="0" max="20" value="4" required />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Energy</span>
+                    <input id="card-energy" class="ui-input" type="number" min="0" max="20" value="6" required />
+                  </label>
+                </div>
+                <div class="inline-grid-3">
+                  <label class="ui-field">
+                    <span class="ui-label">ATK</span>
+                    <input id="card-atk" class="ui-input" type="number" min="0" max="30" value="6" required />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">DEF</span>
+                    <input id="card-def" class="ui-input" type="number" min="0" max="30" value="7" required />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">SPD</span>
+                    <input id="card-spd" class="ui-input" type="number" min="0" max="30" value="4" required />
+                  </label>
+                </div>
+                <button class="ui-btn ui-btn-primary" type="submit">Create Card</button>
+              </form>
+
+              <form id="card-update-form" class="app-form-block auth-gated">
+                <h3>Update Card Stats</h3>
+                <label class="ui-field">
+                  <span class="ui-label">Card</span>
+                  <select id="card-update-id" class="ui-select"></select>
+                </label>
+                <div class="inline-grid-3">
+                  <label class="ui-field">
+                    <span class="ui-label">ATK</span>
+                    <input id="card-update-atk" class="ui-input" type="number" min="0" max="30" value="5" required />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">DEF</span>
+                    <input id="card-update-def" class="ui-input" type="number" min="0" max="30" value="5" required />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">SPD</span>
+                    <input id="card-update-spd" class="ui-input" type="number" min="0" max="30" value="5" required />
+                  </label>
+                </div>
+                <button class="ui-btn ui-btn-secondary" type="submit">Apply Stats Update</button>
+                <p class="mono helper-text">Consume 1 creative point por actualizacion.</p>
+              </form>
+            </div>
+          </article>
+        </section>
+
+        <section class="app-panel" data-panel="agents">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Agents (ACS)</h2>
+              <div class="head-actions">
+                <span id="agents-count" class="ui-badge info">0 agents</span>
+                <button id="agents-refresh-btn" class="ui-btn ui-btn-ghost">Refresh</button>
+              </div>
+            </div>
+
+            <div class="section-grid section-grid-2">
+              <form id="agents-create-form" class="app-form-block auth-gated">
+                <h3>Create Agent</h3>
+                <label class="ui-field">
+                  <span class="ui-label">Name</span>
+                  <input id="agent-name" class="ui-input" type="text" minlength="2" maxlength="80" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Role</span>
+                  <input id="agent-role" class="ui-input" type="text" minlength="2" maxlength="60" value="strategist" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Memory Scope</span>
+                  <select id="agent-memory-scope" class="ui-select">
+                    <option value="private">private</option>
+                    <option value="project">project</option>
+                    <option value="public">public</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Detail</span>
+                  <textarea id="agent-detail" class="ui-textarea" rows="3"></textarea>
+                </label>
+                <button class="ui-btn ui-btn-primary" type="submit">Create Agent</button>
+              </form>
+
+              <div class="panel-stack">
+                <h3>Agent List</h3>
+                <ul id="agents-list" class="activity-list compact-list"></ul>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="app-panel" data-panel="creators">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Creators (Approved)</h2>
+              <span class="ui-badge warning">Workflow</span>
+            </div>
+
+            <div class="section-grid section-grid-2">
+              <div class="panel-stack">
+                <h3>Creator Status</h3>
+                <div id="creators-status-card" class="result-card">
+                  <p class="mono">No session.</p>
+                </div>
+              </div>
+
+              <div class="panel-stack">
+                <form id="creators-apply-form" class="app-form-block auth-gated">
+                  <h3>Apply Program</h3>
+                  <label class="ui-field">
+                    <span class="ui-label">Message</span>
+                    <textarea id="creators-apply-message" class="ui-textarea" rows="4" minlength="10"></textarea>
+                  </label>
+                  <button class="ui-btn ui-btn-primary" type="submit">Submit Application</button>
+                </form>
+
+                <form id="creators-redeem-form" class="app-form-block auth-gated">
+                  <h3>Redeem Invite</h3>
+                  <label class="ui-field">
+                    <span class="ui-label">Invite Code</span>
+                    <input id="creators-invite-code" class="ui-input mono" type="text" />
+                  </label>
+                  <button class="ui-btn ui-btn-secondary" type="submit">Redeem Code</button>
+                </form>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="app-panel" data-panel="settings">
+          <article class="ui-glass ui-card">
+            <div class="app-card-head">
+              <h2 class="ui-heading">Settings (AI Config)</h2>
+              <span class="ui-badge info">Secure</span>
+            </div>
+            <div class="section-grid section-grid-2">
+              <form id="ai-config-form" class="app-form-block auth-gated">
+                <h3>Provider Matrix</h3>
+                <label class="ui-field">
+                  <span class="ui-label">Provider</span>
+                  <select id="ai-provider" class="ui-select">
+                    <option value="openai-compatible">openai-compatible</option>
+                    <option value="openai">openai</option>
+                    <option value="openrouter">openrouter</option>
+                    <option value="groq">groq</option>
+                    <option value="anthropic">anthropic</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Model</span>
+                  <input id="ai-model" class="ui-input mono" type="text" value="gpt-4.1-mini" required />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Endpoint</span>
+                  <input id="ai-endpoint" class="ui-input mono" type="url" value="https://api.openai.com/v1/chat/completions" />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">API Key (safe vault)</span>
+                  <input id="ai-api-key" class="ui-input mono" type="password" autocomplete="off" />
+                </label>
+                <div class="inline-grid-2">
+                  <label class="ui-field">
+                    <span class="ui-label">Temperature</span>
+                    <input id="ai-temperature" class="ui-input" type="number" min="0" max="2" step="0.1" value="0.2" />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Max Tokens</span>
+                    <input id="ai-max-tokens" class="ui-input" type="number" min="64" max="4096" step="1" value="600" />
+                  </label>
+                </div>
+                <label class="ui-field">
+                  <span class="ui-label">System Prompt</span>
+                  <textarea id="ai-system-prompt" class="ui-textarea" rows="5"></textarea>
+                </label>
+                <label class="check-item">
+                  <input id="ai-enabled" type="checkbox" />
+                  <span>Enable this config for AI actions</span>
+                </label>
+                <div class="item-actions">
+                  <button class="ui-btn ui-btn-primary" type="submit">Save AI Config</button>
+                  <button id="ai-config-clear-key-btn" class="ui-btn ui-btn-secondary" type="button">Clear API Key</button>
+                </div>
+              </form>
+
+              <div class="panel-stack">
+                <article class="result-card">
+                  <h3>Connection Status</h3>
+                  <p id="ai-config-status" class="mono">No config loaded.</p>
+                  <p id="ai-config-masked-key" class="mono">API key: not configured</p>
+                </article>
+
+                <form id="ai-config-test-form" class="app-form-block auth-gated">
+                  <h3>Execution Sandbox</h3>
+                  <label class="ui-field">
+                    <span class="ui-label">Test Prompt</span>
+                    <input id="ai-test-prompt" class="ui-input" type="text" value="Respond with the single word READY" required />
+                  </label>
+                  <button class="ui-btn ui-btn-secondary" type="submit">Run Provider Test</button>
+                </form>
+
+                <article class="result-card">
+                  <h3>Last Provider Output</h3>
+                  <pre id="ai-config-test-output" class="mono ai-test-output">No test executed.</pre>
+                </article>
+
+                <form id="ai-permissions-form" class="app-form-block auth-gated">
+                  <h3>AI Tool Permissions</h3>
+                  <p class="mono">Default OFF. Red = blocked, green = allowed.</p>
+                  <p id="ai-permissions-sync" class="mono">Sync: local only</p>
+                  <p id="ai-policy-state" class="mono ai-policy-state state-off">Policy: bloqueada</p>
+                  <p id="ai-permissions-hint" class="mono">Activa permisos para que AI pueda ejecutar acciones.</p>
+                  <div class="ai-permission-grid">
+                    <button class="ai-perm-btn off" data-ai-perm-key="readScene" type="button">Read Scene <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="createGeometry" type="button">Create Geometry <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="editGeometry" type="button">Edit Geometry <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="materials" type="button">Materials <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="booleans" type="button">Booleans <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="templates" type="button">Templates <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="delete" type="button">Delete <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="cards" type="button">Cards <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="agents" type="button">Agents <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="skills" type="button">Skills <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="grid" type="button">Grid <strong>OFF</strong></button>
+                    <button class="ai-perm-btn off" data-ai-perm-key="export" type="button">Export <strong>OFF</strong></button>
+                  </div>
+                  <div class="item-actions">
+                    <button class="ui-btn ui-btn-primary" type="submit">Save Permissions</button>
+                    <button id="ai-permissions-safe-btn" class="ui-btn ui-btn-secondary" type="button">Modo Seguro</button>
+                    <button id="ai-permissions-builder-btn" class="ui-btn ui-btn-secondary" type="button">Modo Modelado</button>
+                    <button id="ai-permissions-agents-btn" class="ui-btn ui-btn-secondary" type="button">Modo Agentes</button>
+                    <button id="ai-permissions-full-btn" class="ui-btn ui-btn-secondary" type="button">Full Manual</button>
+                    <button id="ai-permissions-disable-btn" class="ui-btn ui-btn-secondary" type="button">Disable All</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="ui-modal" id="app-auth-modal" aria-hidden="true">
+      <div class="ui-modal-backdrop"></div>
+      <div class="ui-modal-panel ui-glass">
+        <div class="app-modal-header">
+          <h2 class="ui-heading">Access Imperial Shell</h2>
+          <button class="ui-btn ui-btn-ghost" data-close-modal="app-auth-modal">Close</button>
+        </div>
+
+        <div id="app-auth-switcher">
+          <div class="ui-tabs" id="app-auth-tabs">
+            <button class="ui-tab active" data-tab="login">Login</button>
+            <button class="ui-tab" data-tab="register">Register</button>
+          </div>
+
+          <div class="app-auth-panels">
+            <form id="app-login-form" class="app-form" data-tab-panel="login">
+              <label class="ui-field">
+                <span class="ui-label">Username</span>
+                <input class="ui-input" id="app-login-username" type="text" minlength="3" maxlength="30" required />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">Password</span>
+                <input class="ui-input" id="app-login-password" type="password" minlength="8" maxlength="120" required />
+              </label>
+              <button class="ui-btn ui-btn-primary" type="submit">Login</button>
+            </form>
+
+            <form id="app-register-form" class="app-form hidden" data-tab-panel="register">
+              <label class="ui-field">
+                <span class="ui-label">Username</span>
+                <input class="ui-input" id="app-register-username" type="text" minlength="3" maxlength="30" required />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">Password</span>
+                <input class="ui-input" id="app-register-password" type="password" minlength="8" maxlength="120" required />
+              </label>
+              <button class="ui-btn ui-btn-primary" type="submit">Create Account</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/app/app.js"></script>
+  </body>
+</html>
