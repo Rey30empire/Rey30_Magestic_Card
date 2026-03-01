@@ -103,6 +103,19 @@ test("me ai-config endpoints enforce validation and policy gating", async () => 
     );
     assert.equal(enableWithoutKey.status, 400);
 
+    const blockedEndpoint = await requestJson(
+      "PUT",
+      "/api/me/ai-config",
+      {
+        provider: "openai-compatible",
+        model: "gpt-4.1-mini",
+        endpoint: "http://127.0.0.1:1234/v1/chat/completions",
+        enabled: false
+      },
+      authHeaders
+    );
+    assert.equal(blockedEndpoint.status, 400);
+
     const configSaved = await requestJson(
       "PUT",
       "/api/me/ai-config",
