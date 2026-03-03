@@ -3,8 +3,10 @@ import test from "node:test";
 import type { RenderPrimitive } from "../../reycad/src/engine/scenegraph/evaluator";
 import {
   computeSceneRuntimeProfile,
+  evaluateSceneBudgetUsage,
   primitiveScaleRadius,
   resolveLodLevel,
+  resolveSceneBudgetTargets,
   resolveSceneProfile,
   type LodDistanceProfile
 } from "../../reycad/src/engine/rendering/renderTuning";
@@ -118,4 +120,26 @@ test("resolveSceneProfile keeps empty and small scenes as indoor", () => {
   assert.equal(resolveSceneProfile(45, 30), "indoor");
   assert.equal(resolveSceneProfile(180, 120), "outdoor");
   assert.equal(resolveSceneProfile(450, 200), "large-world");
+});
+
+test("scene budget targets scale with scene profile and quality", () => {
+  const indoorLow = resolveSceneBudgetTargets("indoor", "low", 120);
+  const indoorHigh = resolveSceneBudgetTargets("indoor", "high", 120);
+  const largeHigh = resolveSceneBudgetTargets("large-world", "high", 1200);
+
+  assert.ok(indoorLow.drawCalls < indoorHigh.drawCalls);
+  assert.ok(indoorLow.triangles < indoorHigh.triangles);
+  assert.ok(indoorHigh.drawCalls < largeHigh.drawCalls);
+  assert.ok(indoorHigh.triangles < largeHigh.triangles);
+});
+
+test("scene budget evaluation emits warn and critical alerts", () => {
+  const targets = resolveSceneBudgetTargets("outdoor", "medium", 420);
+  const warn = evaluateSceneBudgetUsage(Math.round(targets.drawCalls * 0.93), Math.round(targets.triangles * 0.94), targets);
+  const critical = evaluateSceneBudgetUsage(Math.round(targets.drawCalls * 1.12), Math.round(targets.triangles * 1.16), targets);
+
+  assert.equal(warn.alert, "warn");
+  assert.equal(critical.alert, "critical");
+  assert.ok(warn.reasons.length > 0);
+  assert.ok(critical.reasons.length > 0);
 });

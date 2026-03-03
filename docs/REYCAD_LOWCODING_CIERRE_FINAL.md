@@ -40,3 +40,5 @@
   - metricas extendidas de render (`staticBatchGroups/staticBatchMeshes`).
   - metricas de assets en `PerformancePanel` (manifest/cache, loads, hits/misses, memoria).
   - `engineApi.generateBenchmarkScene(preset)` + panel de benchmark para pruebas reproducibles de rendimiento.
+  - presupuesto automatico por escena (`drawCalls/triangles`) con alerta en tiempo real (`ok/warn/critical`) y logs de transicion.
+  - prefetch hibrido por camara + seleccion con prioridad dinamica para reducir stutter durante navegacion.

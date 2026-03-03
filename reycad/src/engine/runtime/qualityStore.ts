@@ -4,6 +4,11 @@ import { QualityManager, type QualityMode, type QualityLevel, type QualitySnapsh
 export type RenderStatsSnapshot = {
   drawCalls: number;
   triangles: number;
+  budgetDrawCallsTarget: number;
+  budgetTrianglesTarget: number;
+  budgetDrawCallUsage: number;
+  budgetTriangleUsage: number;
+  budgetAlert: "ok" | "warn" | "critical";
   lines: number;
   points: number;
   visibleMeshes: number;
@@ -27,6 +32,11 @@ export type RenderStatsSnapshot = {
 const DEFAULT_RENDER_STATS: RenderStatsSnapshot = {
   drawCalls: 0,
   triangles: 0,
+  budgetDrawCallsTarget: 0,
+  budgetTrianglesTarget: 0,
+  budgetDrawCallUsage: 0,
+  budgetTriangleUsage: 0,
+  budgetAlert: "ok",
   lines: 0,
   points: 0,
   visibleMeshes: 0,
@@ -156,6 +166,11 @@ export const useQualityStore = create<QualityStore>((set) => ({
       if (
         current.drawCalls === stats.drawCalls &&
         current.triangles === stats.triangles &&
+        current.budgetDrawCallsTarget === stats.budgetDrawCallsTarget &&
+        current.budgetTrianglesTarget === stats.budgetTrianglesTarget &&
+        current.budgetDrawCallUsage === stats.budgetDrawCallUsage &&
+        current.budgetTriangleUsage === stats.budgetTriangleUsage &&
+        current.budgetAlert === stats.budgetAlert &&
         current.lines === stats.lines &&
         current.points === stats.points &&
         current.visibleMeshes === stats.visibleMeshes &&

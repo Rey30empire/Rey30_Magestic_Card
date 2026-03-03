@@ -19,6 +19,21 @@ export type SceneRuntimeProfile = {
   instancingThreshold: number;
 };
 
+export type SceneBudgetTargets = {
+  drawCalls: number;
+  triangles: number;
+};
+
+export type SceneBudgetAlertLevel = "ok" | "warn" | "critical";
+
+export type SceneBudgetUsage = {
+  targets: SceneBudgetTargets;
+  drawCallUsage: number;
+  triangleUsage: number;
+  alert: SceneBudgetAlertLevel;
+  reasons: string[];
+};
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -84,6 +99,77 @@ export function resolveInstancingThreshold(sceneProfile: SceneRenderProfile, nod
     return nodeCount > 450 ? 2 : 3;
   }
   return nodeCount > 700 ? 2 : 3;
+}
+
+export function resolveSceneBudgetTargets(
+  sceneProfile: SceneRenderProfile,
+  qualityLevel: QualityLevel,
+  sceneNodeCount: number
+): SceneBudgetTargets {
+  const baseTargets: Record<SceneRenderProfile, Record<QualityLevel, SceneBudgetTargets>> = {
+    indoor: {
+      low: { drawCalls: 180, triangles: 240_000 },
+      medium: { drawCalls: 260, triangles: 420_000 },
+      high: { drawCalls: 340, triangles: 650_000 },
+      ultra: { drawCalls: 460, triangles: 900_000 }
+    },
+    outdoor: {
+      low: { drawCalls: 260, triangles: 420_000 },
+      medium: { drawCalls: 360, triangles: 700_000 },
+      high: { drawCalls: 480, triangles: 1_100_000 },
+      ultra: { drawCalls: 620, triangles: 1_500_000 }
+    },
+    "large-world": {
+      low: { drawCalls: 340, triangles: 700_000 },
+      medium: { drawCalls: 480, triangles: 1_200_000 },
+      high: { drawCalls: 680, triangles: 1_900_000 },
+      ultra: { drawCalls: 900, triangles: 2_600_000 }
+    }
+  };
+
+  const referenceNodes: Record<SceneRenderProfile, number> = {
+    indoor: 180,
+    outdoor: 520,
+    "large-world": 1300
+  };
+  const densityScale = clamp(sceneNodeCount / referenceNodes[sceneProfile], 0.8, 1.25);
+  const base = baseTargets[sceneProfile][qualityLevel];
+  return {
+    drawCalls: Math.max(80, Math.round(base.drawCalls * densityScale)),
+    triangles: Math.max(120_000, Math.round(base.triangles * densityScale))
+  };
+}
+
+export function evaluateSceneBudgetUsage(
+  drawCalls: number,
+  triangles: number,
+  targets: SceneBudgetTargets
+): SceneBudgetUsage {
+  const drawUsage = targets.drawCalls > 0 ? drawCalls / targets.drawCalls : 0;
+  const triangleUsage = targets.triangles > 0 ? triangles / targets.triangles : 0;
+  let alert: SceneBudgetAlertLevel = "ok";
+
+  if (drawUsage >= 1.08 || triangleUsage >= 1.1) {
+    alert = "critical";
+  } else if (drawUsage >= 0.9 || triangleUsage >= 0.92) {
+    alert = "warn";
+  }
+
+  const reasons: string[] = [];
+  if (drawUsage >= 0.9) {
+    reasons.push(`drawCalls ${drawCalls}/${targets.drawCalls}`);
+  }
+  if (triangleUsage >= 0.92) {
+    reasons.push(`triangles ${triangles}/${targets.triangles}`);
+  }
+
+  return {
+    targets,
+    drawCallUsage: Number(drawUsage.toFixed(3)),
+    triangleUsage: Number(triangleUsage.toFixed(3)),
+    alert,
+    reasons
+  };
 }
 
 export function resolveCullBaseMargin(sceneProfile: SceneRenderProfile): number {

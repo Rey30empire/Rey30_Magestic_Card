@@ -136,6 +136,11 @@ body,
   color: #ffd39e;
 }
 
+.pill.bad {
+  border-color: #b84a57;
+  color: #ffb8c1;
+}
+
 .muted {
   margin: 0;
   color: #9baec3;

@@ -32,6 +32,11 @@ export type AssetManagerSnapshot = {
   prefetchQueued: number;
 };
 
+export type TexturePrefetchRequest = {
+  asset: TextureAsset;
+  priority: RuntimeAssetPriority;
+};
+
 type TextureLoaderLike = {
   loadAsync: (url: string) => Promise<Texture>;
 };
@@ -302,6 +307,45 @@ export class RuntimeAssetManager {
       this.prefetchQueued += 1;
       void this.loadTextureAsset(asset, priority);
     }
+    return queuedCount;
+  }
+
+  prefetchTextureRequests(requests: TexturePrefetchRequest[]): number {
+    if (requests.length === 0) {
+      return 0;
+    }
+
+    const deduped = new Map<string, TexturePrefetchRequest>();
+    for (const request of requests) {
+      if (!request || !request.asset?.id) {
+        continue;
+      }
+      const existing = deduped.get(request.asset.id);
+      if (!existing || priorityWeight(request.priority) > priorityWeight(existing.priority)) {
+        deduped.set(request.asset.id, request);
+      }
+    }
+
+    let queuedCount = 0;
+    for (const request of deduped.values()) {
+      const manifest = this.upsertTextureAsset(request.asset);
+      const cached = this.textureCache.get(request.asset.id);
+      if (cached && cached.version === manifest.version) {
+        continue;
+      }
+      if (this.pendingById.has(request.asset.id)) {
+        const queued = this.queuedById.get(request.asset.id);
+        if (queued) {
+          queued.priority = Math.max(queued.priority, priorityWeight(request.priority));
+        }
+        continue;
+      }
+
+      queuedCount += 1;
+      this.prefetchQueued += 1;
+      void this.loadTextureAsset(request.asset, request.priority);
+    }
+
     return queuedCount;
   }
 

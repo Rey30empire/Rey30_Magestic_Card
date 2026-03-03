@@ -52,6 +52,7 @@ export default function PerformancePanel(): JSX.Element {
   const [benchmarkPreset, setBenchmarkPreset] = useState<"indoor" | "outdoor" | "large-world">("outdoor");
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState("Sin benchmark generado.");
+  const budgetClass = renderStats.budgetAlert === "ok" ? "ok" : renderStats.budgetAlert === "warn" ? "warn" : "bad";
 
   const bodyNodes = useMemo(
     () =>
@@ -168,6 +169,13 @@ export default function PerformancePanel(): JSX.Element {
         <span className="mono">transitions: {transitions}</span>
         <span className="mono">draw calls: {renderStats.drawCalls}</span>
         <span className="mono">triangles: {renderStats.triangles}</span>
+        <span className={`pill ${budgetClass}`}>budget {renderStats.budgetAlert}</span>
+        <span className="mono">
+          budget draw calls: {renderStats.drawCalls}/{renderStats.budgetDrawCallsTarget} ({(renderStats.budgetDrawCallUsage * 100).toFixed(1)}%)
+        </span>
+        <span className="mono">
+          budget triangles: {renderStats.triangles}/{renderStats.budgetTrianglesTarget} ({(renderStats.budgetTriangleUsage * 100).toFixed(1)}%)
+        </span>
         <span className="mono">lines: {renderStats.lines}</span>
         <span className="mono">points: {renderStats.points}</span>
         <span className="mono">visible meshes: {renderStats.visibleMeshes}</span>
