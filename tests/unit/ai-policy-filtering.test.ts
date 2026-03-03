@@ -12,7 +12,8 @@ function modelingPermissions(): AiPermissions {
     materials: true,
     booleans: true,
     templates: true,
-    grid: true
+    grid: true,
+    engineControl: true
   };
 }
 
@@ -29,7 +30,8 @@ function fullPermissions(): AiPermissions {
     agents: true,
     skills: true,
     grid: true,
-    export: true
+    export: true,
+    engineControl: true
   };
 }
 
@@ -51,7 +53,8 @@ test("modeling profile allows geometry/material tools and blocks agents/export/d
     { tool: "create_primitive", args: { primitive: "cylinder" } },
     { tool: "create_material_batch", args: { materials: [{ kind: "solidColor", color: "#aabbcc" }] } },
     { tool: "assign_material_batch", args: { nodeIds: ["n1", "n2"], materialId: "mat_1" } },
-    { tool: "add_boolean", args: { op: "subtract", aId: "a", bId: "b" } }
+    { tool: "add_boolean", args: { op: "subtract", aId: "a", bId: "b" } },
+    { tool: "apply_impulse", args: { nodeId: "n1", impulse: [0, 8, 0] } }
   ];
 
   const blockedCalls: AiToolCall[] = [
@@ -81,4 +84,18 @@ test("full policy lists newly added tools as allowed", () => {
   assert.ok(allowedTools.includes("assign_material_batch"));
   assert.ok(allowedTools.includes("export_stl"));
   assert.ok(allowedTools.includes("export_glb"));
+  assert.ok(allowedTools.includes("set_physics_world"));
+  assert.ok(allowedTools.includes("set_rigidbody"));
+  assert.ok(allowedTools.includes("set_collider"));
+  assert.ok(allowedTools.includes("add_constraint"));
+  assert.ok(allowedTools.includes("update_constraint"));
+  assert.ok(allowedTools.includes("remove_constraint"));
+  assert.ok(allowedTools.includes("list_constraints"));
+  assert.ok(allowedTools.includes("raycast_physics"));
+  assert.ok(allowedTools.includes("get_physics_events"));
+  assert.ok(allowedTools.includes("clear_physics_events"));
+  assert.ok(allowedTools.includes("setup_battle_scene"));
+  assert.ok(allowedTools.includes("play_battle_clash"));
+  assert.ok(allowedTools.includes("stop_battle_scene"));
+  assert.ok(allowedTools.includes("apply_impulse"));
 });

@@ -1,0 +1,99 @@
+{
+  "version": "2026-03-03",
+  "providers": [
+    {
+      "id": "local.instantmesh",
+      "name": "InstantMesh Local",
+      "category": "GEOMETRY_3D",
+      "mode": "local",
+      "enabledByDefault": true,
+      "minFreeVramMb": 14000,
+      "estimatedCostUsd": 0
+    },
+    {
+      "id": "api.meshy",
+      "name": "Meshy.ai",
+      "category": "GEOMETRY_3D",
+      "mode": "api",
+      "endpoint": "https://api.meshy.ai/openapi/v2/text-to-3d",
+      "endpointEnvKey": "MESHY_API_ENDPOINT",
+      "method": "POST",
+      "authEnvKey": "MESHY_AI_API_KEY",
+      "authScheme": "bearer",
+      "enabledByDefault": true,
+      "estimatedCostUsd": 0.18
+    },
+    {
+      "id": "api.elevenlabs",
+      "name": "ElevenLabs Voice",
+      "category": "VOICE_ID",
+      "mode": "api",
+      "endpoint": "https://api.elevenlabs.io/v1/text-to-speech",
+      "method": "POST",
+      "authEnvKey": "ELEVENLABS_API_KEY",
+      "authScheme": "header",
+      "authHeader": "xi-api-key",
+      "enabledByDefault": true,
+      "estimatedCostUsd": 0.05
+    },
+    {
+      "id": "api.runway",
+      "name": "Runway Gen-2",
+      "category": "VIDEO_ANIMATION",
+      "mode": "api",
+      "endpoint": "https://api.runwayml.com/v1/generations",
+      "method": "POST",
+      "authEnvKey": "RUNWAY_GEN2_API_KEY",
+      "authScheme": "bearer",
+      "enabledByDefault": true,
+      "estimatedCostUsd": 0.35
+    },
+    {
+      "id": "local.ollama",
+      "name": "Ollama Local",
+      "category": "LOGIC_GEN",
+      "mode": "local",
+      "enabledByDefault": true,
+      "minFreeVramMb": 8000,
+      "estimatedCostUsd": 0
+    },
+    {
+      "id": "api.anthropic",
+      "name": "Anthropic Claude",
+      "category": "LOGIC_GEN",
+      "mode": "api",
+      "endpoint": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "authEnvKey": "ANTHROPIC_API_KEY",
+      "authScheme": "header",
+      "authHeader": "x-api-key",
+      "enabledByDefault": true,
+      "estimatedCostUsd": 0.08
+    },
+    {
+      "id": "api.openai",
+      "name": "OpenAI",
+      "category": "LOGIC_GEN",
+      "mode": "api",
+      "endpoint": "https://api.openai.com/v1/responses",
+      "method": "POST",
+      "authEnvKey": "OPENAI_API_KEY",
+      "authScheme": "bearer",
+      "enabledByDefault": true,
+      "estimatedCostUsd": 0.06
+    },
+    {
+      "id": "api.gemini",
+      "name": "Google Gemini",
+      "category": "LOGIC_GEN",
+      "mode": "api",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+      "method": "POST",
+      "authEnvKey": "GEMINI_API_KEY",
+      "authScheme": "header",
+      "authHeader": "x-goog-api-key",
+      "enabledByDefault": true,
+      "estimatedCostUsd": 0.03
+    }
+  ]
+}

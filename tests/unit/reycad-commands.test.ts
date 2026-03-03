@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPrimitiveNode, createProject, DEFAULT_TRANSFORM } from "../../reycad/src/engine/scenegraph/factory";
 import type { GroupNode } from "../../reycad/src/engine/scenegraph/types";
-import { deleteNodesCommand, removeMaterialCommand, upsertMaterialCommand } from "../../reycad/src/editor/commands/basicCommands";
+import engineApi from "../../reycad/src/engine/api/engineApi";
+import { useEditorStore } from "../../reycad/src/editor/state/editorStore";
+import {
+  deleteNodesCommand,
+  removeMaterialCommand,
+  setMaterialBatchCommand,
+  setNodeColliderCommand,
+  setNodeRigidBodyCommand,
+  setPhysicsConstraintsCommand,
+  setPhysicsSettingsCommand,
+  upsertMaterialCommand
+} from "../../reycad/src/editor/commands/basicCommands";
 import { duplicateCommand } from "../../reycad/src/editor/commands/advancedCommands";
 import type { EditorData } from "../../reycad/src/editor/state/types";
 
@@ -141,4 +152,187 @@ test("material commands upsert and remove without losing node assignments on und
   const afterUndoRemove = removeCmd.undo(afterRemove);
   assert.ok(afterUndoRemove.project.materials[createdMaterial.id]);
   assert.equal(afterUndoRemove.project.nodes[box.id].materialId, createdMaterial.id);
+});
+
+test("setMaterialBatchCommand assigns and restores materials per node", () => {
+  const state = createBaseState();
+  const root = state.project.nodes[state.project.rootId] as GroupNode;
+
+  const a = createPrimitiveNode("box");
+  a.id = "batch_box_a";
+  a.parentId = root.id;
+  a.materialId = "solid_steel";
+
+  const b = createPrimitiveNode("sphere");
+  b.id = "batch_sphere_b";
+  b.parentId = root.id;
+  b.materialId = "solid_ember";
+
+  root.children.push(a.id, b.id);
+  state.project.nodes[a.id] = a;
+  state.project.nodes[b.id] = b;
+
+  const cmd = setMaterialBatchCommand([a.id, b.id, "missing_node"], "pbr_metal");
+  const afterDo = cmd.do(state);
+  assert.equal(afterDo.project.nodes[a.id].materialId, "pbr_metal");
+  assert.equal(afterDo.project.nodes[b.id].materialId, "pbr_metal");
+
+  const afterUndo = cmd.undo(afterDo);
+  assert.equal(afterUndo.project.nodes[a.id].materialId, "solid_steel");
+  assert.equal(afterUndo.project.nodes[b.id].materialId, "solid_ember");
+});
+
+test("physics commands apply and restore node/world physics", () => {
+  const state = createBaseState();
+  const root = state.project.nodes[state.project.rootId] as GroupNode;
+  const node = createPrimitiveNode("box");
+  node.id = "physics_box";
+  node.parentId = root.id;
+  root.children.push(node.id);
+  state.project.nodes[node.id] = node;
+
+  const rbCmd = setNodeRigidBodyCommand(node.id, undefined, {
+    enabled: true,
+    mode: "dynamic",
+    mass: 2,
+    gravityScale: 1,
+    lockRotation: true,
+    linearVelocity: [0, 0, 0]
+  });
+  const afterRb = rbCmd.do(state);
+  assert.equal(afterRb.project.nodes[node.id].rigidBody?.mode, "dynamic");
+
+  const colCmd = setNodeColliderCommand(node.id, undefined, {
+    enabled: true,
+    shape: "box",
+    isTrigger: false,
+    size: [10, 10, 10]
+  });
+  const afterCol = colCmd.do(afterRb);
+  assert.equal(afterCol.project.nodes[node.id].collider?.shape, "box");
+
+  const beforePhysics = afterCol.project.physics;
+  const nextPhysics = {
+    ...beforePhysics,
+    enabled: true,
+    simulate: true,
+    backend: "lite" as const,
+    floorY: -2
+  };
+  const worldCmd = setPhysicsSettingsCommand(beforePhysics, nextPhysics);
+  const afterWorld = worldCmd.do(afterCol);
+  assert.equal(afterWorld.project.physics.enabled, true);
+  assert.equal(afterWorld.project.physics.backend, "lite");
+
+  const beforeConstraints = afterWorld.project.physics.constraints;
+  const nextConstraints = [
+    ...beforeConstraints,
+    {
+      id: "constraint_one",
+      type: "distance" as const,
+      a: node.id,
+      b: node.id,
+      restLength: 10,
+      stiffness: 0.6,
+      damping: 0.1,
+      enabled: true
+    }
+  ];
+  const constraintsCmd = setPhysicsConstraintsCommand(beforeConstraints, nextConstraints);
+  const afterConstraints = constraintsCmd.do(afterWorld);
+  assert.equal(afterConstraints.project.physics.constraints.length, 1);
+
+  const undoneConstraints = constraintsCmd.undo(afterConstraints);
+  assert.equal(undoneConstraints.project.physics.constraints.length, 0);
+
+  const undoneWorld = worldCmd.undo(undoneConstraints);
+  assert.equal(undoneWorld.project.physics.enabled, beforePhysics.enabled);
+  const undoneCol = colCmd.undo(undoneWorld);
+  assert.equal(undoneCol.project.nodes[node.id].collider, undefined);
+  const undoneRb = rbCmd.undo(undoneCol);
+  assert.equal(undoneRb.project.nodes[node.id].rigidBody, undefined);
+});
+
+test("engineApi loadMannequin creates grouped mannequin nodes", () => {
+  useEditorStore.getState().loadProject(createProject());
+
+  const groupId = engineApi.loadMannequin("humanoid");
+  const snapshot = engineApi.getProjectSnapshot();
+  const group = snapshot.nodes[groupId];
+
+  assert.ok(group);
+  assert.equal(group.type, "group");
+  assert.ok(group.type === "group" && group.children.length >= 5, "expected grouped mannequin with body parts");
+});
+
+test("engineApi generateArena creates arena scaffold and static runtime mode", () => {
+  useEditorStore.getState().loadProject(createProject());
+
+  const arenaId = engineApi.generateArena();
+  const snapshot = engineApi.getProjectSnapshot();
+  const arenaNode = snapshot.nodes[arenaId];
+  const terrains = Object.values(snapshot.nodes).filter((node) => node.type === "primitive" && node.primitive === "terrain");
+
+  assert.ok(arenaNode);
+  assert.equal(arenaNode.type, "group");
+  assert.ok(terrains.length >= 1, "expected at least one terrain node for arena floor");
+  assert.equal(snapshot.physics.enabled, true);
+  assert.equal(snapshot.physics.simulate, false);
+  assert.equal(snapshot.physics.runtimeMode, "static");
+});
+
+test("engineApi applyTextureToSelection assigns uploaded texture map to selected node", () => {
+  useEditorStore.getState().loadProject(createProject());
+  const nodeId = engineApi.createPrimitive("box");
+  engineApi.setSelection([nodeId]);
+
+  const textureId = engineApi.createTextureAsset(
+    "skin.png",
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W2FEAAAAASUVORK5CYII=",
+    "image/png"
+  );
+  const affected = engineApi.applyTextureToSelection(textureId);
+  const snapshot = engineApi.getProjectSnapshot();
+  const node = snapshot.nodes[nodeId];
+  const materialId = node.materialId;
+  const material = materialId ? snapshot.materials[materialId] : undefined;
+
+  assert.equal(affected, 1);
+  assert.ok(materialId);
+  assert.ok(material && material.kind === "pbr");
+  assert.equal(material?.kind === "pbr" ? material.pbr?.baseColorMapId : undefined, textureId);
+});
+
+test("engineApi battle scene flow setup play stop toggles runtime mode", () => {
+  useEditorStore.getState().loadProject(createProject());
+
+  const setup = engineApi.setupBattleScene();
+  assert.ok(setup.arenaId);
+  assert.ok(setup.actorAId);
+  assert.ok(setup.actorBId);
+
+  let snapshot = engineApi.getProjectSnapshot();
+  assert.ok(snapshot.nodes[setup.arenaId]);
+  assert.ok(snapshot.nodes[setup.actorAId]);
+  assert.ok(snapshot.nodes[setup.actorBId]);
+  assert.equal(snapshot.physics.enabled, true);
+  assert.equal(snapshot.physics.simulate, false);
+  assert.equal(snapshot.physics.runtimeMode, "static");
+
+  const started = engineApi.playBattleClash(20);
+  assert.equal(started, true);
+
+  snapshot = engineApi.getProjectSnapshot();
+  assert.equal(snapshot.physics.enabled, true);
+  assert.equal(snapshot.physics.simulate, true);
+  assert.equal(snapshot.physics.runtimeMode, "arena");
+
+  const runtimeState = engineApi.getBattleSceneState();
+  assert.ok(runtimeState);
+  assert.equal(runtimeState?.arenaId, setup.arenaId);
+
+  engineApi.stopBattleScene();
+  snapshot = engineApi.getProjectSnapshot();
+  assert.equal(snapshot.physics.simulate, false);
+  assert.equal(snapshot.physics.runtimeMode, "static");
 });

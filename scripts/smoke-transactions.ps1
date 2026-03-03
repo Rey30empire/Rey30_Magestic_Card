@@ -73,27 +73,9 @@ try {
   $regAdmin = Invoke-Api -Method "POST" -Uri "$base/api/auth/register" -Headers @{ "x-client-platform" = "web" } -BodyObj @{ username = $adminName; password = $password }
 
   $adminId = [string]$regAdmin.Body.user.id
-  $promoteScript = @'
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database(process.env.DB_PATH || "data/rey30.db");
-const id = process.argv[2];
-const now = new Date().toISOString();
-db.serialize(() => {
-  db.get("SELECT id FROM roles WHERE key='admin'", (e, role) => {
-    if (e || !role) { console.error(e ? e.message : "missing role"); process.exit(1); }
-    db.run("UPDATE users SET role='admin' WHERE id=?", [id], (e2) => {
-      if (e2) { console.error(e2.message); process.exit(1); }
-      db.run(
-        "INSERT OR IGNORE INTO user_roles (id,user_id,role_id,assigned_by,created_at) VALUES (lower(hex(randomblob(16))),?,?,NULL,?)",
-        [id, role.id, now],
-        (e3) => { if (e3) { console.error(e3.message); process.exit(1); } console.log("OK"); db.close(); }
-      );
-    });
-  });
-});
-'@
-  $promote = $promoteScript | node - $adminId
-  if (-not ($promote -match "OK")) { throw "promote failed" }
+  $promoteScriptPath = Join-Path $repoRoot "scripts\promote-admin.cjs"
+  $promote = node $promoteScriptPath $adminId 2>&1
+  if ($LASTEXITCODE -ne 0 -or -not ($promote -match "PROMOTED_ADMIN")) { throw "promote failed: $promote" }
 
   $sellerLogin = Invoke-Api -Method "POST" -Uri "$base/api/auth/login" -Headers @{ "x-client-platform" = "web" } -BodyObj @{ username = $sellerName; password = $password }
   $buyerLogin = Invoke-Api -Method "POST" -Uri "$base/api/auth/login" -Headers @{ "x-client-platform" = "web" } -BodyObj @{ username = $buyerName; password = $password }

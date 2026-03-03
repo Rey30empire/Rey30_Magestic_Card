@@ -1,0 +1,24 @@
+[package]
+name = "reymeshy"
+version = "0.1.0"
+edition = "2021"
+description = "ReyMeshy geometry core bootstrap (isolated phase 1)"
+license = "MIT"
+
+[lib]
+name = "reymeshy"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+wasm = ["dep:wasm-bindgen"]
+parallel = []
+gpu = []
+debug_checks = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+meshopt = "0"
+parry3d = "0"
+serde_json = "1"
+wasm-bindgen = { version = "0.2", optional = true }

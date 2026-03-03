@@ -9,11 +9,13 @@ import ConsolePanel from "../ui/panels/ConsolePanel";
 import AiPanel from "../ui/panels/AiPanel";
 import PythonConsolePanel from "../ui/panels/PythonConsolePanel";
 import VersionPanel from "../ui/panels/VersionPanel";
+import MaterialLabPanel from "../ui/panels/MaterialLabPanel";
+import PerformancePanel from "../ui/panels/PerformancePanel";
 import Canvas3D from "../engine/rendering/Canvas3D";
 import { useEditorStore } from "../editor/state/editorStore";
 import engineApi from "../engine/api/engineApi";
 
-const LAYOUT_KEY = "reycad.layout.v3";
+const LAYOUT_KEY = "reycad.layout.v5";
 
 const panelComponents = {
   canvas: () => <Canvas3D />,
@@ -24,7 +26,9 @@ const panelComponents = {
   console: () => <ConsolePanel />,
   ai: () => <AiPanel />,
   python: () => <PythonConsolePanel />,
-  versions: () => <VersionPanel />
+  versions: () => <VersionPanel />,
+  materiallab: () => <MaterialLabPanel />,
+  performance: () => <PerformancePanel />
 };
 
 function seedDefaultLayout(event: DockviewReadyEvent): void {
@@ -62,6 +66,16 @@ function seedDefaultLayout(event: DockviewReadyEvent): void {
     position: {
       referencePanel: canvas,
       direction: "right"
+    }
+  });
+
+  event.api.addPanel({
+    id: "panel_materiallab",
+    component: "materiallab",
+    title: "MaterialLab",
+    position: {
+      referencePanel: "panel_inspector",
+      direction: "within"
     }
   });
 
@@ -114,6 +128,16 @@ function seedDefaultLayout(event: DockviewReadyEvent): void {
       direction: "within"
     }
   });
+
+  event.api.addPanel({
+    id: "panel_performance",
+    component: "performance",
+    title: "Performance",
+    position: {
+      referencePanel: "panel_console",
+      direction: "within"
+    }
+  });
 }
 
 function seedModelingLayout(event: DockviewReadyEvent): void {
@@ -137,6 +161,18 @@ function seedModelingLayout(event: DockviewReadyEvent): void {
     title: "Scene",
     position: { referencePanel: "panel_assets", direction: "within" }
   });
+  event.api.addPanel({
+    id: "panel_materiallab",
+    component: "materiallab",
+    title: "MaterialLab",
+    position: { referencePanel: "panel_inspector", direction: "within" }
+  });
+  event.api.addPanel({
+    id: "panel_performance",
+    component: "performance",
+    title: "Performance",
+    position: { referencePanel: "panel_inspector", direction: "within" }
+  });
 }
 
 function seedAiLayout(event: DockviewReadyEvent): void {
@@ -155,10 +191,22 @@ function seedAiLayout(event: DockviewReadyEvent): void {
     position: { referencePanel: canvas, direction: "left" }
   });
   event.api.addPanel({
+    id: "panel_materiallab",
+    component: "materiallab",
+    title: "MaterialLab",
+    position: { referencePanel: "panel_ai", direction: "within" }
+  });
+  event.api.addPanel({
     id: "panel_console",
     component: "console",
     title: "Console",
     position: { referencePanel: canvas, direction: "below" }
+  });
+  event.api.addPanel({
+    id: "panel_performance",
+    component: "performance",
+    title: "Performance",
+    position: { referencePanel: "panel_console", direction: "within" }
   });
 }
 
@@ -176,6 +224,12 @@ function seedScriptingLayout(event: DockviewReadyEvent): void {
     component: "console",
     title: "Console",
     position: { referencePanel: canvas, direction: "below" }
+  });
+  event.api.addPanel({
+    id: "panel_performance",
+    component: "performance",
+    title: "Performance",
+    position: { referencePanel: "panel_console", direction: "within" }
   });
 }
 
@@ -263,6 +317,9 @@ export default function AppShell(): JSX.Element {
         </button>
         <button className="btn" onClick={() => engineApi.createPrimitive("text")} type="button">
           + Text
+        </button>
+        <button className="btn" onClick={() => engineApi.createPrimitive("terrain")} type="button">
+          + Terrain
         </button>
       </div>
       <DockviewReact className="dockview-theme-abyss shell-dock" components={panelComponents} onReady={onReady} />

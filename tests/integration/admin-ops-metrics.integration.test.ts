@@ -2,10 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import sqlite3 from "sqlite3";
 import test from "node:test";
+import { grantAdminRoleForTest } from "./helpers/test-db";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const port = 4730 + Math.floor(Math.random() * 100);
@@ -73,69 +72,6 @@ async function getJson(
   };
 }
 
-type DbGet = <T>(sql: string, params?: Array<string | number | null>) => Promise<T | undefined>;
-type DbRun = (sql: string, params?: Array<string | number | null>) => Promise<void>;
-
-function openDb(filePath: string): { get: DbGet; run: DbRun; close: () => Promise<void> } {
-  const sqlite = sqlite3.verbose();
-  const db = new sqlite.Database(filePath);
-
-  const get: DbGet = <T>(sql: string, params: Array<string | number | null> = []) =>
-    new Promise<T | undefined>((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(row as T | undefined);
-      });
-    });
-
-  const run: DbRun = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  const close = () =>
-    new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  return { get, run, close };
-}
-
-async function grantAdminRole(filePath: string, userId: string): Promise<void> {
-  const db = openDb(filePath);
-  try {
-    const adminRole = await db.get<{ id: string }>("SELECT id FROM roles WHERE key = 'admin'");
-    assert.ok(adminRole?.id);
-
-    await db.run(
-      `
-        INSERT OR IGNORE INTO user_roles (id, user_id, role_id, assigned_by, created_at)
-        VALUES (?, ?, ?, NULL, ?)
-      `,
-      [randomUUID(), userId, adminRole.id, new Date().toISOString()]
-    );
-
-    await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [userId]);
-  } finally {
-    await db.close();
-  }
-}
-
 async function registerUser(username: string): Promise<{ userId: string; token: string; username: string }> {
   const register = await postJson(
     "/api/auth/register",
@@ -181,7 +117,7 @@ test("admin ops metrics exposes cards/marketplace 409 and rate-limit 429 counter
     const seller = await registerUser(`ops_seller_${Date.now()}`);
     const buyer = await registerUser(`ops_buyer_${Date.now()}`);
     const admin = await registerUser(`ops_admin_${Date.now()}`);
-    await grantAdminRole(dbPath, admin.userId);
+    await grantAdminRoleForTest(dbPath, admin.userId);
 
     const adminLoginRetry = await postJson(
       "/api/auth/login",
@@ -198,7 +134,7 @@ test("admin ops metrics exposes cards/marketplace 409 and rate-limit 429 counter
     assert.ok(adminToken);
 
     const cardPayload = {
-      name: "Ops Sentinel",
+      name: `Ops Sentinel ${Date.now()}`,
       rarity: "rare",
       cardClass: "guardian",
       abilities: ["block", "taunt"],

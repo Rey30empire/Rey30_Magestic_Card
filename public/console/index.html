@@ -128,6 +128,8 @@
               <button class="ui-tab" data-tab="skills">Skills</button>
               <button class="ui-tab" data-tab="tools">Tools</button>
               <button class="ui-tab" data-tab="memory">Memory</button>
+              <button id="console-module-tab-training" class="ui-tab" data-tab="training">Training</button>
+              <button id="console-module-tab-training-ops" class="ui-tab" data-tab="trainingOps">Training Ops</button>
               <button class="ui-tab" data-tab="sandbox">Sandbox</button>
               <button class="ui-tab" data-tab="marketplace">Marketplace</button>
             </div>
@@ -278,6 +280,66 @@
               <ul id="console-memory-list" class="console-list"></ul>
             </section>
 
+            <section class="console-module-panel hidden" data-tab-panel="training">
+              <div class="console-section-header">
+                <h3 class="console-subheading">Training Jobs</h3>
+                <span id="console-job-count" class="ui-badge info">0 items</span>
+              </div>
+              <form id="console-training-form" class="console-stack console-disabled">
+                <label class="ui-field">
+                  <span class="ui-label">Mode</span>
+                  <select class="ui-select" id="console-training-mode">
+                    <option value="profile-tuning">profile-tuning (web/mobile/desktop)</option>
+                    <option value="fine-tuning">fine-tuning (desktop)</option>
+                    <option value="lora">lora (desktop)</option>
+                    <option value="adapter">adapter (desktop)</option>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Config JSON</span>
+                  <textarea class="ui-textarea mono" id="console-training-config" rows="5">{ "simulateStepDelayMs": 240 }</textarea>
+                </label>
+                <button type="submit" class="ui-btn ui-btn-primary">Create Job</button>
+              </form>
+              <ul id="console-job-list" class="console-list"></ul>
+            </section>
+
+            <section class="console-module-panel hidden" data-tab-panel="trainingOps">
+              <div class="console-section-header">
+                <h3 class="console-subheading">Training Queue Ops</h3>
+                <span class="ui-badge info">admin.training.manage</span>
+              </div>
+
+              <div class="console-toolbar">
+                <button type="button" id="console-training-ops-refresh-metrics" class="ui-btn ui-btn-secondary">Refresh Metrics</button>
+                <button type="button" id="console-training-ops-refresh-dlq" class="ui-btn ui-btn-secondary">Refresh DLQ</button>
+                <button type="button" id="console-training-ops-dlq-batch-requeue" class="ui-btn ui-btn-primary">Requeue Batch</button>
+              </div>
+
+              <div id="console-training-ops-metrics" class="console-empty">Training queue metrics pending.</div>
+              <ul id="console-training-ops-alerts" class="console-list"></ul>
+
+              <div class="console-toolbar">
+                <label class="ui-field">
+                  <span class="ui-label">DLQ Limit</span>
+                  <input class="ui-input" id="console-training-ops-dlq-limit" type="number" min="1" max="200" value="20" />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">DLQ Offset</span>
+                  <input class="ui-input" id="console-training-ops-dlq-offset" type="number" min="0" max="20000" value="0" />
+                </label>
+                <label class="ui-field">
+                  <span class="ui-label">Remove Original</span>
+                  <select class="ui-select" id="console-training-ops-remove-original">
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </label>
+              </div>
+
+              <ul id="console-training-ops-dlq-list" class="console-list"></ul>
+            </section>
+
             <section class="console-module-panel hidden" data-tab-panel="sandbox">
               <form id="console-sandbox-form" class="console-stack">
                 <label class="ui-field">
@@ -331,32 +393,6 @@
           </form>
 
           <ul id="console-project-list" class="console-list"></ul>
-        </section>
-
-        <section class="ui-glass ui-card">
-          <div class="console-section-header">
-            <h2 class="ui-heading">Training Jobs</h2>
-            <span id="console-job-count" class="ui-badge info">0 items</span>
-          </div>
-
-          <form id="console-training-form" class="console-stack console-disabled">
-            <label class="ui-field">
-              <span class="ui-label">Mode</span>
-              <select class="ui-select" id="console-training-mode">
-                <option value="profile-tuning">profile-tuning (web/mobile/desktop)</option>
-                <option value="fine-tuning">fine-tuning (desktop)</option>
-                <option value="lora">lora (desktop)</option>
-                <option value="adapter">adapter (desktop)</option>
-              </select>
-            </label>
-            <label class="ui-field">
-              <span class="ui-label">Config JSON</span>
-              <textarea class="ui-textarea mono" id="console-training-config" rows="5">{ "simulateStepDelayMs": 240 }</textarea>
-            </label>
-            <button type="submit" class="ui-btn ui-btn-primary">Create Job</button>
-          </form>
-
-          <ul id="console-job-list" class="console-list"></ul>
         </section>
       </main>
     </div>

@@ -5,6 +5,13 @@ import sqlite3 from "sqlite3";
 import { env } from "../config/env";
 import { PERMISSION_KEYS, ROLE_DEFAULT_PERMISSIONS, ROLE_KEYS, RoleKey } from "../types/rbac";
 import { mirrorAuditLog } from "./postgres";
+import {
+  executeSqlServerQuery,
+  initSqlServerConnection,
+  initSqlServerMirror,
+  isSqlServerConfigured,
+  mirrorAuditLogToSqlServer
+} from "./sqlserver";
 import { withSpan } from "../services/ops-tracing";
 
 type SqlValue = string | number | null;
@@ -29,6 +36,11 @@ type VersioningRow = {
 
 const sqlite = sqlite3.verbose();
 let db: sqlite3.Database | null = null;
+let sqlServerPrimaryInitialized = false;
+
+function isSqlServerPrimaryMode(): boolean {
+  return env.DB_ENGINE === "sqlserver";
+}
 
 function ensureDbDir(dbPath: string): void {
   const dir = path.dirname(dbPath);
@@ -284,6 +296,26 @@ async function ensureAuditLogHashColumns(): Promise<void> {
 }
 
 export async function initDb(): Promise<void> {
+  if (isSqlServerPrimaryMode()) {
+    if (sqlServerPrimaryInitialized) {
+      return;
+    }
+
+    if (!isSqlServerConfigured()) {
+      throw new Error(
+        "DB_ENGINE=sqlserver requires SQL_SERVER_HOST, SQL_SERVER_DATABASE, SQL_SERVER_USER and SQL_SERVER_PASSWORD."
+      );
+    }
+
+    await initSqlServerConnection();
+    await initSqlServerMirror();
+    await seedRbacCatalog();
+    await ensureLegacyUsersHaveRoleRows();
+    await normalizeActiveMarketplaceListings();
+    sqlServerPrimaryInitialized = true;
+    return;
+  }
+
   if (db) {
     return;
   }
@@ -525,6 +557,59 @@ export async function initDb(): Promise<void> {
       );
     `,
     `
+      CREATE TABLE IF NOT EXISTS asset_vault_items (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        author TEXT,
+        license TEXT,
+        source TEXT NOT NULL DEFAULT 'import',
+        stats_json TEXT NOT NULL DEFAULT '{}',
+        variants_json TEXT NOT NULL DEFAULT '{}',
+        dependencies_json TEXT NOT NULL DEFAULT '[]',
+        thumbnail_path TEXT,
+        dedupe_hash TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS asset_vault_files (
+        id TEXT PRIMARY KEY,
+        asset_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_role TEXT NOT NULL,
+        mime_type TEXT,
+        size_bytes INTEGER NOT NULL DEFAULT 0,
+        file_hash TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(asset_id, file_path),
+        FOREIGN KEY(asset_id) REFERENCES asset_vault_items(id) ON DELETE CASCADE
+      );
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS project_asset_links (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL,
+        linked_by TEXT,
+        overrides_json TEXT NOT NULL DEFAULT '{}',
+        embed_mode TEXT NOT NULL DEFAULT 'reference',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(project_id, asset_id),
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(asset_id) REFERENCES asset_vault_items(id) ON DELETE CASCADE,
+        FOREIGN KEY(linked_by) REFERENCES users(id) ON DELETE SET NULL
+      );
+    `,
+    `
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
         owner_user_id TEXT NOT NULL,
@@ -602,6 +687,26 @@ export async function initDb(): Promise<void> {
         updated_at TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY(keys_ref) REFERENCES vault_entries(id) ON DELETE SET NULL
+      );
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS mcp_hybrid_toggles (
+        user_id TEXT PRIMARY KEY,
+        local_engine_enabled INTEGER NOT NULL DEFAULT 1,
+        api_engine_enabled INTEGER NOT NULL DEFAULT 1,
+        prefer_local_over_api INTEGER NOT NULL DEFAULT 1,
+        providers_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS mcp_hybrid_budget_daily (
+        day_key TEXT PRIMARY KEY,
+        spent_usd REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
     `,
     `
@@ -744,6 +849,8 @@ export async function initDb(): Promise<void> {
         platform TEXT NOT NULL,
         logs TEXT NOT NULL,
         error_message TEXT,
+        cancel_requested INTEGER NOT NULL DEFAULT 0,
+        cancel_requested_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         started_at TEXT,
@@ -942,7 +1049,17 @@ export async function initDb(): Promise<void> {
     "CREATE INDEX IF NOT EXISTS idx_agent_tool_runs_status_created ON agent_tool_runs(status, created_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_vault_entries_user_created ON vault_entries(user_id, created_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_projects_owner_updated ON projects(owner_user_id, updated_at DESC);",
-    "CREATE INDEX IF NOT EXISTS idx_user_ai_configs_updated ON user_ai_configs(updated_at DESC);"
+    "CREATE INDEX IF NOT EXISTS idx_user_ai_configs_updated ON user_ai_configs(updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_mcp_hybrid_toggles_updated ON mcp_hybrid_toggles(updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_mcp_hybrid_budget_daily_updated ON mcp_hybrid_budget_daily(updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_asset_vault_items_owner_updated ON asset_vault_items(owner_user_id, updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_asset_vault_items_type_updated ON asset_vault_items(type, updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_asset_vault_items_source_updated ON asset_vault_items(source, updated_at DESC);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_asset_vault_items_owner_hash_unique ON asset_vault_items(owner_user_id, dedupe_hash) WHERE dedupe_hash IS NOT NULL;",
+    "CREATE INDEX IF NOT EXISTS idx_asset_vault_files_asset_created ON asset_vault_files(asset_id, created_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_asset_vault_files_hash ON asset_vault_files(file_hash);",
+    "CREATE INDEX IF NOT EXISTS idx_project_asset_links_project_updated ON project_asset_links(project_id, updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_project_asset_links_asset_updated ON project_asset_links(asset_id, updated_at DESC);"
   ];
 
   for (const statement of schemaStatements) {
@@ -954,6 +1071,20 @@ export async function initDb(): Promise<void> {
   );
   if (!hasTrainingIdempotencyColumn) {
     await run("ALTER TABLE training_jobs ADD COLUMN idempotency_key TEXT");
+  }
+
+  const hasTrainingCancelRequestedColumn = await get<{ name: string }>(
+    "SELECT name FROM pragma_table_info('training_jobs') WHERE name = 'cancel_requested'"
+  );
+  if (!hasTrainingCancelRequestedColumn) {
+    await run("ALTER TABLE training_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0");
+  }
+
+  const hasTrainingCancelRequestedAtColumn = await get<{ name: string }>(
+    "SELECT name FROM pragma_table_info('training_jobs') WHERE name = 'cancel_requested_at'"
+  );
+  if (!hasTrainingCancelRequestedAtColumn) {
+    await run("ALTER TABLE training_jobs ADD COLUMN cancel_requested_at TEXT");
   }
 
   await ensureCardsVersioningColumns();
@@ -977,6 +1108,196 @@ function getDb(): sqlite3.Database {
   }
 
   return db;
+}
+
+function splitTopLevelCsv(raw: string): string[] {
+  const output: string[] = [];
+  let current = "";
+  let depth = 0;
+  let quote: "'" | '"' | null = null;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    const prev = index > 0 ? raw[index - 1] : "";
+
+    if (quote) {
+      current += char;
+      if (char === quote && prev !== "\\") {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+      current += char;
+      continue;
+    }
+
+    if (char === ")") {
+      depth = Math.max(0, depth - 1);
+      current += char;
+      continue;
+    }
+
+    if (char === "," && depth === 0) {
+      output.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim().length > 0) {
+    output.push(current.trim());
+  }
+
+  return output;
+}
+
+function ensureOrderByForSqlServerPagination(sqlText: string): string {
+  if (/\bORDER\s+BY\b/i.test(sqlText)) {
+    return sqlText;
+  }
+  return `${sqlText} ORDER BY (SELECT 1)`;
+}
+
+function transformInsertOrIgnore(sqlText: string): string {
+  const match = sqlText.match(
+    /^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+([A-Za-z0-9_"[\].]+)\s*\(([\s\S]+?)\)\s*VALUES\s*\(([\s\S]+?)\)\s*;?\s*$/i
+  );
+  if (!match) {
+    return sqlText;
+  }
+
+  const table = match[1].trim();
+  const columns = match[2].trim();
+  const values = match[3].trim();
+  return `
+BEGIN TRY
+  INSERT INTO ${table} (${columns})
+  VALUES (${values});
+END TRY
+BEGIN CATCH
+  IF ERROR_NUMBER() NOT IN (2601, 2627) THROW;
+END CATCH
+  `.trim();
+}
+
+function transformSqliteUpsert(sqlText: string): string {
+  const match = sqlText.match(
+    /^\s*INSERT\s+INTO\s+([A-Za-z0-9_"[\].]+)\s*\(([\s\S]+?)\)\s*VALUES\s*\(([\s\S]+?)\)\s*ON\s+CONFLICT\s*\(([\s\S]+?)\)\s*DO\s+UPDATE\s+SET\s+([\s\S]+?)\s*;?\s*$/i
+  );
+  if (!match) {
+    return sqlText;
+  }
+
+  const table = match[1].trim();
+  const columnsRaw = match[2].trim();
+  const valuesRaw = match[3].trim();
+  const conflictRaw = match[4].trim();
+  const updateRaw = match[5].trim();
+
+  const columns = splitTopLevelCsv(columnsRaw).map((item) => item.trim());
+  const conflictColumns = splitTopLevelCsv(conflictRaw).map((item) => item.trim());
+  const onClause = conflictColumns.map((column) => `target.${column} = src.${column}`).join(" AND ");
+  const updateClause = updateRaw.replace(/\bexcluded\./gi, "src.");
+  const srcColumns = columns.join(", ");
+
+  return `
+MERGE INTO ${table} AS target
+USING (VALUES (${valuesRaw})) AS src (${srcColumns})
+ON ${onClause}
+WHEN MATCHED THEN
+  UPDATE SET ${updateClause}
+WHEN NOT MATCHED THEN
+  INSERT (${srcColumns})
+  VALUES (${columns.map((column) => `src.${column}`).join(", ")});
+  `.trim();
+}
+
+function transformSelectLimit(sqlText: string): string {
+  if (!/^\s*SELECT\b/i.test(sqlText)) {
+    return sqlText;
+  }
+
+  const noSemicolon = sqlText.replace(/;\s*$/g, "");
+  const limitOffsetMatch = noSemicolon.match(/\s+LIMIT\s+(\?|\d+)\s+OFFSET\s+(\?|\d+)\s*$/i);
+  if (limitOffsetMatch) {
+    const limitToken = limitOffsetMatch[1];
+    const offsetToken = limitOffsetMatch[2];
+    const base = noSemicolon.slice(0, limitOffsetMatch.index ?? noSemicolon.length).trim();
+    const needsParamSwap = limitToken === "?" && offsetToken === "?";
+    const marker = needsParamSwap ? " /*__sqlserver_limit_offset_swap__*/" : "";
+    return `${ensureOrderByForSqlServerPagination(base)} OFFSET ${offsetToken} ROWS FETCH NEXT ${limitToken} ROWS ONLY${marker}`;
+  }
+
+  const limitMatch = noSemicolon.match(/\s+LIMIT\s+(\?|\d+)\s*$/i);
+  if (!limitMatch) {
+    return sqlText;
+  }
+
+  const limitToken = limitMatch[1];
+  const base = noSemicolon.slice(0, limitMatch.index ?? noSemicolon.length).trim();
+  return `${ensureOrderByForSqlServerPagination(base)} OFFSET 0 ROWS FETCH NEXT ${limitToken} ROWS ONLY`;
+}
+
+function transformSqlForSqlServer(rawSql: string): string {
+  let sqlText = rawSql.trim();
+
+  if (/^\s*PRAGMA\b/i.test(sqlText)) {
+    return "SELECT 1 AS noop";
+  }
+
+  sqlText = sqlText.replace(/lower\s*\(\s*hex\s*\(\s*randomblob\s*\(\s*16\s*\)\s*\)\s*\)/gi, "LOWER(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''))");
+  sqlText = sqlText.replace(
+    /\(julianday\(finished_at\)\s*-\s*julianday\(started_at\)\)\s*\*\s*86400000(?:\.0)?/gi,
+    "DATEDIFF_BIG(MILLISECOND, TRY_CAST(started_at AS DATETIME2(3)), TRY_CAST(finished_at AS DATETIME2(3)))"
+  );
+
+  sqlText = transformInsertOrIgnore(sqlText);
+  sqlText = transformSqliteUpsert(sqlText);
+  sqlText = transformSelectLimit(sqlText);
+  sqlText = sqlText.replace(/\bkey\b/gi, "[key]");
+  sqlText = sqlText.replace(/\bclass\b/gi, "[class]");
+
+  return sqlText;
+}
+
+function applySqlServerParameters(sqlText: string, params: SqlValue[]): { sqlText: string; params: SqlValue[] } {
+  const needsLimitOffsetSwap = /\/\*__sqlserver_limit_offset_swap__\*\/\s*$/i.test(sqlText);
+  const cleanedSql = sqlText.replace(/\s*\/\*__sqlserver_limit_offset_swap__\*\/\s*$/i, "");
+  let effectiveParams = params;
+  if (needsLimitOffsetSwap && params.length >= 2) {
+    effectiveParams = [...params];
+    const last = effectiveParams.length - 1;
+    const prev = effectiveParams.length - 2;
+    const limitParam = effectiveParams[prev];
+    effectiveParams[prev] = effectiveParams[last];
+    effectiveParams[last] = limitParam;
+  }
+
+  let placeholderCount = 0;
+  const translated = cleanedSql.replace(/\?/g, () => {
+    placeholderCount += 1;
+    return `@p${placeholderCount}`;
+  });
+
+  if (placeholderCount !== effectiveParams.length) {
+    throw new Error(`SQL parameter mismatch: expected ${placeholderCount}, received ${effectiveParams.length}`);
+  }
+
+  return {
+    sqlText: translated,
+    params: effectiveParams
+  };
 }
 
 function summarizeSql(sql: string): { operation: string; table: string } {
@@ -1012,8 +1333,19 @@ export function run(sql: string, params: SqlValue[] = []): Promise<{ lastID: num
         paramCount: params.length
       }
     },
-    () =>
-      new Promise((resolve, reject) => {
+    async () => {
+      if (isSqlServerPrimaryMode()) {
+        const transformed = transformSqlForSqlServer(sql);
+        const prepared = applySqlServerParameters(transformed, params);
+        const result = await executeSqlServerQuery(prepared.sqlText, prepared.params);
+        const changes = (result.rowsAffected ?? []).reduce((acc, value) => acc + (Number.isFinite(value) ? value : 0), 0);
+        return {
+          lastID: 0,
+          changes
+        };
+      }
+
+      return new Promise((resolve, reject) => {
         getDb().run(sql, params, function onRun(err) {
           if (err) {
             reject(err);
@@ -1022,7 +1354,8 @@ export function run(sql: string, params: SqlValue[] = []): Promise<{ lastID: num
 
           resolve({ lastID: this.lastID, changes: this.changes });
         });
-      })
+      });
+    }
   );
 }
 
@@ -1038,8 +1371,16 @@ export function get<T>(sql: string, params: SqlValue[] = []): Promise<T | undefi
         paramCount: params.length
       }
     },
-    () =>
-      new Promise<T | undefined>((resolve, reject) => {
+    async () => {
+      if (isSqlServerPrimaryMode()) {
+        const transformed = transformSqlForSqlServer(sql);
+        const prepared = applySqlServerParameters(transformed, params);
+        const result = await executeSqlServerQuery(prepared.sqlText, prepared.params);
+        const row = result.recordset.length > 0 ? result.recordset[0] : undefined;
+        return row as T | undefined;
+      }
+
+      return new Promise<T | undefined>((resolve, reject) => {
         getDb().get(sql, params, (err, row) => {
           if (err) {
             reject(err);
@@ -1048,7 +1389,8 @@ export function get<T>(sql: string, params: SqlValue[] = []): Promise<T | undefi
 
           resolve(row as T | undefined);
         });
-      })
+      });
+    }
   );
 }
 
@@ -1064,8 +1406,15 @@ export function all<T>(sql: string, params: SqlValue[] = []): Promise<T[]> {
         paramCount: params.length
       }
     },
-    () =>
-      new Promise<T[]>((resolve, reject) => {
+    async () => {
+      if (isSqlServerPrimaryMode()) {
+        const transformed = transformSqlForSqlServer(sql);
+        const prepared = applySqlServerParameters(transformed, params);
+        const result = await executeSqlServerQuery(prepared.sqlText, prepared.params);
+        return result.recordset as T[];
+      }
+
+      return new Promise<T[]>((resolve, reject) => {
         getDb().all(sql, params, (err, rows) => {
           if (err) {
             reject(err);
@@ -1074,7 +1423,8 @@ export function all<T>(sql: string, params: SqlValue[] = []): Promise<T[]> {
 
           resolve(rows as T[]);
         });
-      })
+      });
+    }
   );
 }
 
@@ -1109,5 +1459,16 @@ export async function auditLog(userId: string | null, action: string, payload: u
     });
   } catch (error) {
     console.error("[postgres-mirror] audit log mirror failed", error);
+  }
+
+  try {
+    await mirrorAuditLogToSqlServer({
+      userId,
+      action,
+      payload,
+      createdAt
+    });
+  } catch (error) {
+    console.error("[sqlserver-mirror] audit log mirror failed", error);
   }
 }

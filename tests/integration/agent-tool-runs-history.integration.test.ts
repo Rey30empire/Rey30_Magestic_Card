@@ -2,78 +2,56 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import sqlite3 from "sqlite3";
+import { createServer as createNetServer } from "node:net";
 import test from "node:test";
+import { grantAdminRoleForTest } from "./helpers/test-db";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const port = 55600 + Math.floor(Math.random() * 2000);
-const baseUrl = `http://127.0.0.1:${port}`;
+let baseUrl = "";
 const dbPath = path.join(os.tmpdir(), `rey30-int-tool-runs-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
-
-type DbGet = <T>(sql: string, params?: Array<string | number | null>) => Promise<T | undefined>;
-type DbRun = (sql: string, params?: Array<string | number | null>) => Promise<void>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function openDb(filePath: string): { get: DbGet; run: DbRun; close: () => Promise<void> } {
-  const sqlite = sqlite3.verbose();
-  const db = new sqlite.Database(filePath);
-
-  const get: DbGet = <T>(sql: string, params: Array<string | number | null> = []) =>
-    new Promise<T | undefined>((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) {
-          reject(err);
+async function allocateTestPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => {
+        if (error) {
+          reject(error);
           return;
         }
-        resolve(row as T | undefined);
-      });
-    });
-
-  const run: DbRun = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
+        if (!port || port <= 0) {
+          reject(new Error("Failed to allocate test port"));
           return;
         }
-        resolve();
+        resolve(port);
       });
     });
-
-  const close = () =>
-    new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  return { get, run, close };
+  });
 }
 
-async function grantAdminRole(filePath: string, userId: string): Promise<void> {
-  const db = openDb(filePath);
-  try {
-    const adminRole = await db.get<{ id: string }>("SELECT id FROM roles WHERE key = 'admin'");
-    assert.ok(adminRole?.id);
-    await db.run(
-      `
-        INSERT OR IGNORE INTO user_roles (id, user_id, role_id, assigned_by, created_at)
-        VALUES (?, ?, ?, NULL, ?)
-      `,
-      [randomUUID(), userId, adminRole.id, new Date().toISOString()]
-    );
-    await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [userId]);
-  } finally {
-    await db.close();
+async function stopServer(server: ChildProcess): Promise<void> {
+  if (server.exitCode !== null) {
+    return;
+  }
+
+  const onExit = new Promise<void>((resolve) => {
+    server.once("exit", () => resolve());
+  });
+
+  server.kill("SIGTERM");
+  await Promise.race([onExit, sleep(1500)]);
+
+  if (server.exitCode === null) {
+    server.kill("SIGKILL");
+    await Promise.race([onExit, sleep(1000)]);
   }
 }
 
@@ -125,6 +103,9 @@ async function sendJson(
 }
 
 test("agent tool run history stores and lists dev-tools executions", async () => {
+  const port = await allocateTestPort();
+  baseUrl = `http://127.0.0.1:${port}`;
+
   const env = {
     ...process.env,
     PORT: String(port),
@@ -150,7 +131,7 @@ test("agent tool run history stores and lists dev-tools executions", async () =>
     const userId = registerBody.user?.id;
     assert.ok(userId);
 
-    await grantAdminRole(dbPath, userId as string);
+    await grantAdminRoleForTest(dbPath, userId as string);
 
     const login = await sendJson(
       "POST",
@@ -238,8 +219,7 @@ test("agent tool run history stores and lists dev-tools executions", async () =>
     assert.equal(runItem?.status, "success");
     assert.ok((runItem?.latencyMs ?? -1) >= 0);
   } finally {
-    server.kill("SIGTERM");
-    await sleep(300);
+    await stopServer(server);
     if (fs.existsSync(dbPath)) {
       fs.rmSync(dbPath, { force: true });
     }

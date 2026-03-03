@@ -1,0 +1,562 @@
+0) META
+
+Integrar en el editor 3D de la app un “Mesh Edit Mode” tipo Blender, con herramientas de edición poligonal (quads), más un paquete de herramientas extra (materiales, pintura, UV lite, remesh, retopo simple, openFolder, library, optimización) sin romper el rendimiento.
+
+Regla:
+
+Web/Mobile = modo “Lite” (sin operaciones carísimas, todo con límites).
+
+Desktop = modo “Pro” (más operaciones, workers, openFolder real).
+
+1) STACK Y PRINCIPIOS
+Render/Engine
+
+Motor de render: Three.js (o el que ya use el repo, pero mantener API similar).
+
+Geometría editable: BufferGeometry + estructura interna propia (Half-Edge o Winged-Edge).
+
+Workers: todas las operaciones de malla (subdivide, remesh, unwrap, decimate) deben correr en WebWorker (web) o threads (desktop) para no congelar UI.
+
+UI
+
+Viewport central
+
+Panel izquierdo: Asset Browser + OpenFolder
+
+Panel derecho: Tools (Edit Mode, Material, UV, Paint)
+
+Barra superior: modos (Object/Edit/Sculpt/Paint/UV)
+
+Command Palette global (Ctrl+K)
+
+Shortcuts tipo Blender (E extrude, G move, R rotate, S scale, F fill, X delete)
+
+Performance
+
+Operaciones pesadas con límites:
+
+max vertices editable (web): 200k
+
+max faces editable (web): 150k
+
+desktop: 2M si GPU/CPU lo permite
+
+Auto LOD previews (cuando editas, se baja resolución; al soltar, recalcula final)
+
+2) NUEVOS MODOS (MVP)
+
+Implementar en editor:
+
+Object Mode
+
+Seleccionar objetos, mover/rotar/escalar
+
+Cargar assets
+
+Aplicar materiales y skins
+
+Edit Mode (Polygon Modeling) — lo de los cuadritos
+
+Selección de:
+
+Vertex
+
+Edge
+
+Face
+
+Transformaciones:
+
+Move (G), Rotate (R), Scale (S)
+
+Herramientas clave:
+
+Extrude (E)
+
+Inset (I)
+
+Loop Cut (Ctrl+R)
+
+Bevel (Ctrl+B)
+
+Fill (F)
+
+Bridge Edge Loops
+
+Merge (M) / Weld
+
+Knife (K) (lite)
+
+Delete (X)
+
+Duplicate (Shift+D)
+
+Snap to grid/vertex/edge/face
+
+UV Mode (Lite)
+
+Auto unwrap (Smart UV Project / LSCM lite)
+
+Pack UVs
+
+Scale/rotate islands
+
+Seams marking (lite)
+
+Paint Mode
+
+Pintar máscara y/o albedo sobre textura
+
+Brush + undo strokes
+
+Material Mode
+
+Material presets (Metal, Glass, Mirror, Rubber, Skin, Fabric)
+
+Double-sided, mirror, transparency
+
+3) ESTRUCTURA DE DATOS PARA EDICIÓN DE MALLA
+3.1 EditableMesh (modelo interno)
+
+Crear módulo EditableMesh que no dependa del render directo.
+
+Representación recomendada: Half-Edge (mejor para operaciones topológicas).
+
+Estructuras:
+
+Vertex { id, position(vec3), normal(vec3), uv(vec2?), edges[], selected }
+
+HalfEdge { id, vertFrom, vertTo, faceLeft, next, prev, twin, selected }
+
+Face { id, halfEdge, materialSlot, selected }
+
+Además:
+
+SelectionState: sets de vertexIds, edgeIds, faceIds
+
+MeshHistory: stack de comandos (undo/redo)
+
+Importante:
+Convertir THREE.BufferGeometry -> EditableMesh al entrar en Edit Mode
+y EditableMesh -> BufferGeometry al aplicar cambios (o incremental update para performance).
+
+3.2 MeshCommand (Undo/Redo)
+
+Todo cambio de malla debe ser un comando reversible:
+
+AddVerticesCommand
+
+DeleteFacesCommand
+
+ExtrudeCommand
+
+BevelCommand
+
+LoopCutCommand
+
+MergeCommand
+
+etc.
+
+Guardar diffs mínimos:
+
+ids creados
+
+ids borrados
+
+posiciones previas
+
+conectividad previa
+
+4) EDIT MODE: HERRAMIENTAS (MVP DETALLADO)
+4.1 Selección
+
+Implementar:
+
+Click: seleccionar elemento bajo cursor (raycast + picking)
+
+Box select (B)
+
+Lasso select (opcional)
+
+Select linked (L): selecciona isla conectada
+
+Select loop (Alt+Click en edge)
+
+Select ring (Shift+Alt+Click)
+
+Picking:
+
+Para faces: raycast a triangles y mapear a faceId
+
+Para edges/verts: usar “pick buffers” (ID render pass) o KD-tree para cercanos.
+
+4.2 Transform (G/R/S)
+
+Gizmo opcional + shortcuts
+
+Pivot: median / individual origins / 3D cursor
+
+Snapping: grid/vertex/edge/face
+
+4.3 Extrude (E)
+
+Extrude funciona para faces/edges:
+
+Para faces:
+
+Duplicar anillo de vertices del perímetro
+
+Crear faces laterales conectando perímetro original con perímetro nuevo
+
+Mover la extrusión por normal promedio o por eje
+
+Para edges:
+
+Duplicar vertices del edge
+
+Crear quad lateral
+
+UI:
+
+“Extrude along normal”
+
+“Extrude distance” slider
+
+“Clamp to axis” toggle
+
+4.4 Fill (F)
+
+Si usuario selecciona:
+
+3–n vertices formando loop → crear face n-gon y triangulación interna
+
+2 edge loops → usar Bridge
+
+4.5 Loop Cut (Ctrl+R)
+
+Implementación MVP:
+
+Detectar edge loop en quads (seguir twin/next en patrón)
+
+Insertar nuevo anillo de vertices a “t” factor (0.5 por defecto)
+
+Dividir faces atravesadas en 2 quads
+
+UI:
+
+scroll cambia factor
+
+click confirma
+
+4.6 Bevel (Ctrl+B)
+
+MVP:
+
+Para edges seleccionados:
+
+Crear offset edges paralelos (approx)
+
+Insertar faces nuevas (quads) entre original y offset
+
+Parámetros:
+
+width
+
+segments (1–4 en web; 1–8 desktop)
+
+4.7 Merge/Weld (M)
+
+Merge by distance:
+
+unificar vertices en radio
+
+actualizar half-edges
+
+Merge to center / to cursor
+
+4.8 Knife (K) Lite
+
+Usuario traza un corte en pantalla
+
+Proyectar la línea sobre la cara intersectada
+
+Split edges/caras creando vertices nuevos en intersección
+
+Limitar: solo una cara o pocas caras para MVP.
+
+4.9 Subdivide / Triangulate / Quadify
+
+Subdivide faces seleccionadas (1–3 iter web)
+
+Triangulate (para export)
+
+Quadify simple (si detecta pares de tris)
+
+5) UV MODE (LITE PERO ÚTIL)
+5.1 Auto Unwrap
+
+Opciones:
+
+Smart UV Project (basado en ángulo)
+
+Box/Cylindrical/Spherical mapping
+
+Pack islands
+
+Guardar UV per vertex (o per corner si haces seams).
+
+5.2 Seams
+
+Mark seam on edges seleccionados
+
+Unwrap re-calcula islas
+
+UI:
+
+“Auto seams” toggle (detecta bordes por ángulo duro)
+
+6) PAINT MODE (SKINS + PINTURA)
+6.1 Pintura en Textura
+
+MVP:
+
+Render target (texture canvas) por material slot
+
+Brush: size/hardness/opacity/color
+
+Proyección:
+
+usar UV si existe
+
+si no existe, auto-triplanar paint mask
+
+6.2 Drag & Drop Foto → Skin
+
+Cuando arrastran una imagen:
+
+Crear SkinLayer(photo)
+
+Auto mapping:
+
+humanoide: planar frontal + ajuste
+
+armas/props: cylindrical o triplanar
+
+Mezcla: overlay/multiply
+
+Controles: scale/rot/offset + roughness/metalness
+
+7) MATERIAL MODE (TIPO BLENDER “PBR LITE”)
+
+Crear MaterialPresetLibrary:
+
+Metal (metalness=1, roughness 0.2–0.6)
+
+Mirror (metalness=1, roughness 0.0–0.03, envMap fuerte)
+
+Glass (transmission + ior)
+
+Rubber (metalness=0, roughness 0.8)
+
+Fabric (roughness alto + normal)
+
+Skin (subsurface fake: wrap lighting + slight sheen)
+
+Double-sided toggle (DoubleSide)
+
+Agregar:
+
+HDRI env presets (para que mirror se vea pro)
+
+“Quality mode”: Low/Med/High (baja samples/post)
+
+8) OPENFOLDER + ASSET BROWSER
+Desktop (Tauri/Electron)
+
+OpenFolder -> scan glb/gltf/obj/fbx/png/jpg/hdr/json
+
+Crear assets.index.json con:
+
+path
+
+type
+
+size
+
+hash
+
+thumbnail path
+
+Lazy load:
+
+previews en background
+
+cargar mesh solo al arrastrar o previsualizar
+
+Web
+
+Import files multi
+
+guardar en IndexedDB
+
+construir index local igual
+
+9) HERRAMIENTAS EXTRA (LAS “MA COSA” QUE QUIERES)
+
+Agregar estos módulos extra, todos distintos:
+
+9.1 Remesh (Voxel/Surface) — modo Sculpt/Utility
+
+Voxel remesh (lite): convertir mesh a volumen grid y reconstruir
+
+Surface remesh: uniformizar tri size
+Limitado:
+
+web: resoluciones pequeñas (64–128)
+
+desktop: 256–512
+
+9.2 Decimate / Optimize
+
+Simplify mesh (quadric error simplification)
+
+Target polycount slider
+
+Auto LOD generator (LOD0/1/2)
+
+9.3 Retopo Lite (para “cuadritos bonitos”)
+
+MVP:
+
+Shrinkwrap: proyectar una malla lowpoly sobre highpoly
+
+Snap to surface con brush
+
+PolyBuild tool (colocar quads sobre superficie) — opcional desktop
+
+9.4 Boolean (solo desktop MVP)
+
+Union / Difference / Intersect
+
+Warn: booleans son pesados, no en web inicialmente.
+
+9.5 Export/Import
+
+Export GLB/GLTF
+
+Export OBJ (opcional)
+
+Guardar proyecto: .reycad.json + assets index
+
+10) GUARDADO, AUTOSAVE Y RECOVERY
+
+Autosave cada 10–30s (incremental)
+
+Crash recovery al iniciar
+
+Undo/Redo persistible (opcional)
+
+Formato:
+
+project.reycad.json:
+
+scene graph
+
+meshes metadata
+
+materials
+
+skins
+
+uv data (si existe)
+
+tool settings
+
+11) PLAN DE IMPLEMENTACIÓN POR FASES (para no romper todo)
+Fase 1 (WOW rápido)
+
+Edit Mode básico:
+
+select vertex/edge/face
+
+move/rotate/scale
+
+extrude + delete + merge
+
+Material presets
+
+Save/load scene
+
+Fase 2 (lo que tú quieres “cuadritos pro”)
+
+Loop cut
+
+Bevel
+
+Fill + Bridge
+
+UV Auto unwrap + pack
+
+Fase 3 (skins + pintura)
+
+Paint mode (mask + albedo)
+
+Drag&drop foto -> skin layers
+
+Region targeting por material slots
+
+Fase 4 (openFolder + library + performance)
+
+Desktop openFolder
+
+asset index
+
+thumbnails worker
+
+LOD/decimate
+
+Fase 5 (remesh + retopo lite)
+
+voxel remesh
+
+shrinkwrap retopo
+
+export pipeline fuerte
+
+12) CHECKLIST DE PRUEBAS
+
+Crear cubo, extrude 20 veces, no debe crashear
+
+Loop cut en malla quad, debe mantener quads
+
+Bevel con 3 segments, no debe generar caras rotas
+
+Unwrap auto y pintar sobre UV, debe verse en viewport
+
+Drag foto a arma/personaje, debe aplicarse skin sin UV manual
+
+Save/load: todo igual
+
+Undo/redo 200 pasos sin corromper mesh
+
+13) REGLAS “NO NEGOCIABLES”
+
+Cualquier operación pesada: Worker
+
+Web: límites estrictos
+
+Desktop: modo pro
+
+UI limpia: shortcuts + command palette, no 100 botones
+
+Todo con comandos para undo/redo
+
+Polygon Modeling
+
+Quad modeling
+
+Edit Mode (Vertices/Edges/Faces)
+
+Herramientas: Extrude / Fill / Loop Cut / Bevel
+“No uses UI desordenada. Mantén 3 paneles (assets, viewport, tools). Todo lo demás por command palette. Atajos tipo Blender. Edit Mode debe sentirse instantáneo. No bloquees el hilo principal.”

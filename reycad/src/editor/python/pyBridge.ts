@@ -54,6 +54,16 @@ const pending = new Map<string, PendingRequest>();
 const APPLY_YIELD_EVERY = 20;
 let applyAbortController: AbortController | null = null;
 
+function asVec3(value: unknown, fallback: [number, number, number] = [0, 0, 0]): [number, number, number] {
+  if (!Array.isArray(value) || value.length < 3) {
+    return fallback;
+  }
+  const x = Number(value[0]);
+  const y = Number(value[1]);
+  const z = Number(value[2]);
+  return [Number.isFinite(x) ? x : fallback[0], Number.isFinite(y) ? y : fallback[1], Number.isFinite(z) ? z : fallback[2]];
+}
+
 function seededRandomFactory(seed: number): () => number {
   let state = Math.max(1, seed | 0);
   return () => {
@@ -144,7 +154,7 @@ async function executePythonOps(ops: Array<{ tool: string; args: Record<string, 
 
       if (op.tool === "create_primitive") {
         engineApi.createPrimitive(
-          (op.args.primitive as "box" | "cylinder" | "sphere" | "cone" | "text") ?? "box",
+          (op.args.primitive as "box" | "cylinder" | "sphere" | "cone" | "text" | "terrain") ?? "box",
           (op.args.params as Record<string, unknown> | undefined) ?? {},
           (op.args.transform as { position?: [number, number, number] } | undefined) ?? {},
           op.args.materialId as string | undefined
@@ -177,6 +187,81 @@ async function executePythonOps(ops: Array<{ tool: string; args: Record<string, 
           angleSnap: op.args.angleSnap as number | undefined,
           size: op.args.size as number | undefined
         });
+        await tick();
+      } else if (op.tool === "set_rigidbody") {
+        engineApi.setNodeRigidBody(String(op.args.nodeId ?? ""), {
+          enabled: op.args.enabled as boolean | undefined,
+          mode: op.args.mode as "dynamic" | "kinematic" | "fixed" | undefined,
+          mass: op.args.mass as number | undefined,
+          gravityScale: op.args.gravityScale as number | undefined,
+          lockRotation: op.args.lockRotation as boolean | undefined,
+          linearVelocity: op.args.linearVelocity as [number, number, number] | undefined
+        });
+        await tick();
+      } else if (op.tool === "set_collider") {
+        engineApi.setNodeCollider(String(op.args.nodeId ?? ""), {
+          enabled: op.args.enabled as boolean | undefined,
+          shape: op.args.shape as "box" | "sphere" | "capsule" | "mesh" | undefined,
+          isTrigger: op.args.isTrigger as boolean | undefined,
+          size: op.args.size as [number, number, number] | undefined,
+          radius: op.args.radius as number | undefined,
+          height: op.args.height as number | undefined
+        });
+        await tick();
+      } else if (op.tool === "set_physics_world") {
+        engineApi.setPhysicsSettings({
+          enabled: op.args.enabled as boolean | undefined,
+          simulate: op.args.simulate as boolean | undefined,
+          runtimeMode: op.args.runtimeMode as "static" | "arena" | undefined,
+          backend: op.args.backend as "auto" | "lite" | "rapier" | undefined,
+          gravity: op.args.gravity === undefined ? undefined : asVec3(op.args.gravity),
+          floorY: op.args.floorY as number | undefined
+        });
+        await tick();
+      } else if (op.tool === "apply_impulse") {
+        const impulse = asVec3(op.args.impulse);
+        engineApi.applyPhysicsImpulse(String(op.args.nodeId ?? ""), impulse);
+        await tick();
+      } else if (op.tool === "setup_battle_scene") {
+        engineApi.setupBattleScene();
+        await tick();
+      } else if (op.tool === "play_battle_clash") {
+        const impulse = typeof op.args.impulse === "number" ? op.args.impulse : undefined;
+        if (impulse === undefined) {
+          engineApi.playBattleClash();
+        } else {
+          engineApi.playBattleClash(impulse);
+        }
+        await tick();
+      } else if (op.tool === "stop_battle_scene") {
+        engineApi.stopBattleScene();
+        await tick();
+      } else if (op.tool === "add_constraint") {
+        const restLength = Number(op.args.restLength);
+        const stiffness = Number(op.args.stiffness);
+        const damping = Number(op.args.damping);
+        engineApi.addPhysicsConstraint({
+          type: "distance",
+          a: String(op.args.aId ?? ""),
+          b: String(op.args.bId ?? ""),
+          restLength: Number.isFinite(restLength) ? restLength : 10,
+          stiffness: Number.isFinite(stiffness) ? stiffness : 0.6,
+          damping: Number.isFinite(damping) ? damping : 0.1,
+          enabled: typeof op.args.enabled === "boolean" ? op.args.enabled : true
+        });
+        await tick();
+      } else if (op.tool === "update_constraint") {
+        engineApi.updatePhysicsConstraint(String(op.args.constraintId ?? ""), {
+          a: op.args.aId as string | undefined,
+          b: op.args.bId as string | undefined,
+          restLength: op.args.restLength as number | undefined,
+          stiffness: op.args.stiffness as number | undefined,
+          damping: op.args.damping as number | undefined,
+          enabled: op.args.enabled as boolean | undefined
+        });
+        await tick();
+      } else if (op.tool === "remove_constraint") {
+        engineApi.removePhysicsConstraint(String(op.args.constraintId ?? ""));
         await tick();
       } else if (op.tool === "selection_set") {
         engineApi.setSelection((op.args.nodeIds as string[]) ?? []);

@@ -1,6 +1,16 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.kdbx
 data/
 npm-debug.log*
 .smoke-*.log
+.app*.log
+.idea/
+*.iml
+reymeshy/target/

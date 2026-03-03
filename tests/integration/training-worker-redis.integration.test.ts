@@ -2,11 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import sqlite3 from "sqlite3";
 import { Queue } from "bullmq";
 import test from "node:test";
+import { grantAdminRoleForTest } from "./helpers/test-db";
 
 const redisUrl = process.env.REDIS_URL;
 const queueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -17,6 +16,7 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 const port = 4625;
 const baseUrl = `http://127.0.0.1:${port}`;
 const dbPath = path.join(os.tmpdir(), `rey30-int-redis-worker-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+const childStdio: "pipe" | "inherit" = process.env.IT_DEBUG_CHILDREN === "1" ? "inherit" : "pipe";
 
 type TrainingJob = {
   id: string;
@@ -68,9 +68,6 @@ type DlqBatchRequeueResponse = {
   }>;
 };
 
-type DbGet = <T>(sql: string, params?: Array<string | number | null>) => Promise<T | undefined>;
-type DbRun = (sql: string, params?: Array<string | number | null>) => Promise<void>;
-
 function parseRedisConnection(url: string): {
   host: string;
   port: number;
@@ -91,66 +88,6 @@ function parseRedisConnection(url: string): {
     db: Number.isFinite(db) ? db : undefined,
     maxRetriesPerRequest: null
   };
-}
-
-function openDb(filePath: string): { get: DbGet; run: DbRun; close: () => Promise<void> } {
-  const sqlite = sqlite3.verbose();
-  const db = new sqlite.Database(filePath);
-
-  const get: DbGet = <T>(sql: string, params: Array<string | number | null> = []) =>
-    new Promise<T | undefined>((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(row as T | undefined);
-      });
-    });
-
-  const run: DbRun = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  const close = () =>
-    new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  return { get, run, close };
-}
-
-async function grantAdminRole(filePath: string, userId: string): Promise<void> {
-  const db = openDb(filePath);
-  try {
-    const adminRole = await db.get<{ id: string }>("SELECT id FROM roles WHERE key = 'admin'");
-    assert.ok(adminRole?.id);
-
-    await db.run(
-      `
-        INSERT OR IGNORE INTO user_roles (id, user_id, role_id, assigned_by, created_at)
-        VALUES (?, ?, ?, NULL, ?)
-      `,
-      [randomUUID(), userId, adminRole.id, new Date().toISOString()]
-    );
-
-    await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [userId]);
-  } finally {
-    await db.close();
-  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -224,16 +161,20 @@ async function getJobs(token: string): Promise<TrainingJob[]> {
 
 async function waitForJobStatus(token: string, jobId: string, target: TrainingJob["status"], timeoutMs = 20_000): Promise<TrainingJob> {
   const started = Date.now();
+  let lastStatus = "missing";
   while (Date.now() - started < timeoutMs) {
     const jobs = await getJobs(token);
     const row = jobs.find((job) => job.id === jobId);
     if (row && row.status === target) {
       return row;
     }
+    if (row) {
+      lastStatus = row.status;
+    }
     await sleep(250);
   }
 
-  throw new Error(`Timed out waiting for job ${jobId} to become ${target}`);
+  throw new Error(`Timed out waiting for job ${jobId} to become ${target} (last status: ${lastStatus})`);
 }
 
 if (!redisUrl) {
@@ -260,7 +201,7 @@ if (!redisUrl) {
         ...commonEnv,
         PORT: String(port)
       },
-      stdio: "pipe"
+      stdio: childStdio
     });
 
     let worker: ChildProcess | null = null;
@@ -273,7 +214,7 @@ if (!redisUrl) {
       worker = spawn("node", ["dist/worker.js"], {
         cwd: repoRoot,
         env: commonEnv,
-        stdio: "pipe"
+        stdio: childStdio
       });
 
       await sleep(500);
@@ -327,7 +268,7 @@ if (!redisUrl) {
       assert.equal(adminRegister.status, 201);
       const adminUserId = (adminRegister.body as { user?: { id?: string } }).user?.id;
       assert.ok(adminUserId);
-      await grantAdminRole(dbPath, adminUserId as string);
+      await grantAdminRoleForTest(dbPath, adminUserId as string);
 
       const adminLogin = await postJson(
         "/api/auth/login",
@@ -441,7 +382,9 @@ if (!redisUrl) {
         {
           mode: "profile-tuning",
           config: {
-            simulateStepDelayMs: 1800
+            simulateStepDelayMs: 120,
+            simulateFailAttempts: 1,
+            maxRetries: 0
           }
         },
         {
@@ -453,28 +396,7 @@ if (!redisUrl) {
       const dlqRecoveryJobId = (createFailedTarget.body as { id?: string }).id;
       assert.ok(dlqRecoveryJobId);
 
-      await waitForJobStatus(userToken as string, dlqRecoveryJobId as string, "running", 15_000);
-
-      const db = openDb(dbPath);
-      try {
-        const now = new Date().toISOString();
-        await db.run(
-          `
-            UPDATE training_jobs
-            SET status = 'failed',
-                error_message = 'forced failure for DLQ recovery test',
-                logs = ?,
-                finished_at = ?,
-                updated_at = ?
-            WHERE id = ?
-          `,
-          [JSON.stringify([`${now} forced failure for DLQ recovery test`]), now, now, dlqRecoveryJobId as string]
-        );
-      } finally {
-        await db.close();
-      }
-
-      await waitForJobStatus(userToken as string, dlqRecoveryJobId as string, "failed", 10_000);
+      await waitForJobStatus(userToken as string, dlqRecoveryJobId as string, "failed", 20_000);
 
       const seededDlqJob = await dlqQueue.add(
         "training.job.failed",
@@ -540,7 +462,7 @@ if (!redisUrl) {
       worker = spawn("node", ["dist/worker.js"], {
         cwd: repoRoot,
         env: commonEnv,
-        stdio: "pipe"
+        stdio: childStdio
       });
       await sleep(700);
 

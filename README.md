@@ -1,6 +1,6 @@
 # Rey30 Mayestic Card - Backend MVP + ACS
 
-Backend Node.js + TypeScript + SQLite con JWT, Socket.IO y sistema ACS (AgentCreator System).
+Backend Node.js + TypeScript con JWT, Socket.IO y sistema ACS (AgentCreator System), con SQL Server como backend principal.
 
 ## Incluye
 - Auth/JWT y RBAC con roles y permisos.
@@ -19,6 +19,9 @@ Backend Node.js + TypeScript + SQLite con JWT, Socket.IO y sistema ACS (AgentCre
 ## Requisitos
 - Node.js 20+
 - npm 10+
+- DB backend:
+  - `DB_ENGINE=sqlserver` (default, base principal)
+  - `DB_ENGINE=sqlite` (fallback legado)
 
 ## Ejecutar
 ```bash
@@ -50,11 +53,102 @@ npm run reycad:dev
 npm run reycad:build
 ```
 
+ReyMeshy sidecar (experimental):
+- Core Rust aislado en `reymeshy/`.
+- CLI command: `cleanup` (stdin JSON `MeshData`, stdout JSON `PipelineOutput`).
+- Endpoints backend:
+  - `GET /api/reymeshy/status`
+  - `POST /api/reymeshy/cleanup`
+  - `POST /api/reymeshy/jobs` (async)
+  - `GET /api/reymeshy/jobs/:id` (poll status)
+- Activación no-code para usuario final:
+  - En `/app` -> `Settings (AI Config)` -> bloque `ReyMeshy Cleanup`.
+  - Toggle `Activar ReyMeshy en esta app` + botón `Probar Cleanup`.
+- Para validar local:
+```bash
+wsl bash -lc "source ~/.cargo/env && cd /mnt/c/Users/rey30/Rey30_Magestic_Card/reymeshy && cargo check && cargo test"
+```
+- Para habilitar invocación desde Node:
+  - `REYMESHY_SIDECAR_ENABLED=true`
+  - `REYMESHY_SIDECAR_EXECUTABLE` (opcional; default dev usa `cargo run`)
+  - `REYMESHY_SIDECAR_ARGS` (csv; args base sin `cleanup`)
+  - `REYMESHY_SIDECAR_CWD` (opcional)
+  - `REYMESHY_SIDECAR_TIMEOUT_MS`
+  - `REYMESHY_JOB_CONCURRENCY` (workers locales para cola async)
+  - `REYMESHY_JOB_MAX_STORED` (retención en memoria de jobs)
+  - `VRAM_SENTINEL_ENABLED` + `VRAM_SENTINEL_*` (guard real via `nvidia-smi`)
+  - Si VRAM Sentinel detecta presión de memoria, `/api/reymeshy/cleanup` y `/api/reymeshy/jobs` responden `503`.
+
+MCP Gateway (experimental):
+- Endpoints backend:
+  - `GET /api/mcp/status`
+  - `GET /api/mcp/hybrid/status`
+  - `PUT /api/mcp/hybrid/toggles`
+  - `POST /api/mcp/hybrid/budget/reset` (admin; reset manual de budget diario)
+  - `POST /api/mcp/execute`
+- Tools actuales:
+  - `reymeshy.cleanup` (sync o async via jobs)
+  - `ollama.generate` (cuando está habilitado)
+  - `instantmesh.generate` (cuando está habilitado y configurado)
+  - `hybrid.dispatch` (router local/API por categoría + budget + VRAM)
+- Flags de control:
+  - `MCP_GATEWAY_ENABLED`
+  - `MCP_TOOL_REYMESHY_ENABLED`
+  - `MCP_TOOL_OLLAMA_ENABLED`
+  - `MCP_TOOL_INSTANTMESH_ENABLED`
+  - `MCP_OLLAMA_API_BASE_URL`, `MCP_OLLAMA_TIMEOUT_MS`
+  - `MCP_INSTANTMESH_COMMAND`, `MCP_INSTANTMESH_ARGS`, `MCP_INSTANTMESH_TIMEOUT_MS`
+  - `MCP_HYBRID_PROVIDERS_FILE` (default `config/InferenceProviders.json`)
+  - `MCP_HYBRID_RESULTS_QUEUE` (cola Redis para resultados híbridos)
+  - `MCP_HYBRID_PROCESS_CONTROL_ENABLED` (si `true`, apagar toggle local intenta detener runtimes locales)
+  - `MCP_HYBRID_PROCESS_CONTROL_TIMEOUT_MS`
+  - `MCP_HYBRID_LOCAL_PROCESS_NAMES` (csv; default `ollama,python_worker,python,python3`)
+  - `LOCAL_MLL_ENABLED`, `LOCAL_VRAM_LIMIT_MB`, `DAILY_BUDGET_USD`, `PREFER_LOCAL_OVER_API`
+  - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `RUNWAY_GEN2_API_KEY`, `MESHY_AI_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_AI_API_KEY`
+  - `REDIS_URL=redis://127.0.0.1:6379` para buzón `MCP_HYBRID_RESULTS_QUEUE`
+- Redis local rápido (Docker):
+```bash
+docker run -d --name rey30-redis -p 6379:6379 redis:7-alpine
+docker exec rey30-redis redis-cli ping
+```
+- UI no-code:
+  - En `/app` -> `Settings (AI Config)` -> bloque `Hybrid Dispatch` para ejecutar `hybrid.dispatch` sin código.
+  - Los toggles del broker se persisten por usuario en DB (`mcp_hybrid_toggles`) y sobreviven reinicios del backend.
+  - El budget diario híbrido se persiste en DB (`mcp_hybrid_budget_daily`) y se recupera tras reinicios.
+  - Botón `Reset Budget (Admin)` en `/app` para reset manual del gasto diario (requiere rol admin).
+
+Asset Vault MVP (experimental):
+- Endpoints backend:
+  - `GET /api/vault/assets` (lista/search/filter)
+  - `POST /api/vault/assets` (registro/import metadata + files index)
+  - `POST /api/vault/upload?assetId=<uuid>&role=model` (upload binario real a disco)
+  - `GET /api/vault/assets/:id` (detalle + files)
+  - `GET /api/vault/assets/:id/files/:fileId/download` (descarga binaria)
+  - `POST /api/vault/assets/:id/link` (link por referencia a proyecto)
+  - `GET /api/vault/projects/:projectId/assets` (assets linkeados por proyecto)
+- UI no-code:
+  - En `/app` -> `Settings (AI Config)` existe panel de Asset Vault para crear asset record, subir archivo y linkear a proyecto.
+- Reglas MVP:
+  - Dedupe por `dedupeHash` por usuario (no duplica registros del vault).
+  - Upload dedupe por `sha256` por asset (si ya existe mismo archivo, no reescribe).
+  - Proyecto guarda referencias (`project_asset_links`) + `overrides`/`embedMode`.
+  - Por defecto no copia archivos al proyecto (`reference`).
+  - Configurable por env: `VAULT_STORAGE_DIR`, `VAULT_UPLOAD_MAX_BYTES`, `VAULT_ALLOWED_EXTENSIONS`.
+
 ## Testing y QA
 Unit + integración:
 ```bash
 npm test
 ```
+
+Fallback SQLite explícito (legacy):
+```bash
+DB_ENGINE=sqlite npm test
+```
+
+`npm run test:integration` es automático según `DB_ENGINE`:
+- `sqlserver` -> ejecuta `test:integration:sqlserver:full` (limpieza por archivo).
+- `sqlite` -> ejecuta la suite legacy SQLite.
 
 Solo unit:
 ```bash
@@ -110,11 +204,27 @@ Vault y rotación de secretos:
 - `VAULT_ACTIVE_KEY_ID` define el key id activo para cifrado nuevo.
 - `VAULT_KEYRING` permite keyring de rotación: `keyId:secret,keyId2:secret2`.
 - Payloads legacy `v1` se pueden rotar a `v2` vía endpoint admin.
+- Scan preventivo de leaks en archivos versionados:
+```bash
+npm run security:scan:secrets
+```
+- CI ejecuta ese scan al inicio (`job: security-secrets`) y bloquea el pipeline si detecta tokens reales.
 
 Mirror incremental a Postgres (dual-write):
 - `POSTGRES_DUAL_WRITE=true` activa espejo best-effort de `training_jobs` y `audit_logs` hacia Postgres.
 - `POSTGRES_URL` define conexión PostgreSQL.
 - `POSTGRES_POOL_MAX` define tamaño máximo del pool.
+
+SQL Server (backend principal por defecto):
+- Con `DB_ENGINE=sqlserver`, el backend exige `SQL_SERVER_*` completos y hace probe al iniciar.
+- `SQL_SERVER_ENABLED=true` mantiene probe explícito aunque no sea modo principal.
+- `SQL_SERVER_HOST`, `SQL_SERVER_PORT`, `SQL_SERVER_DATABASE`.
+- `SQL_SERVER_USER`, `SQL_SERVER_PASSWORD` (compatibilidad legacy: `SQL_USER`, `SQL_PASSWORD`).
+- `SQL_SERVER_INSTANCE` (opcional para instancias tipo `SQLEXPRESS`).
+- `SQL_SERVER_ENCRYPT`, `SQL_SERVER_TRUST_SERVER_CERTIFICATE`.
+- `SQL_SERVER_CONNECT_TIMEOUT_MS`, `SQL_SERVER_REQUEST_TIMEOUT_MS`, `SQL_SERVER_POOL_MAX`.
+- `SQL_SERVER_DUAL_WRITE=true` habilita mirror best-effort de `training_jobs` y `audit_logs` en SQL Server.
+- Para cutover total: `DB_ENGINE=sqlserver` + credenciales `SQL_SERVER_*` válidas.
 
 DLQ admin (solo redis):
 - `GET /api/admin/training/dlq`
@@ -158,12 +268,41 @@ Testing Postgres mirror:
 POSTGRES_URL=postgresql://postgres:postgres@127.0.0.1:5432/rey30_test npm run test:integration:postgres
 ```
 
+Migración completa SQLite -> SQL Server (schema + data):
+```bash
+npm run db:migrate:sqlite-to-sqlserver
+```
+- Usa `DB_PATH` como origen SQLite.
+- Usa `SQL_SERVER_*` (o compatibilidad `SQL_USER`/`SQL_PASSWORD`) como destino SQL Server.
+- Recrea tablas destino y carga todos los registros del origen.
+
+Validación rápida de cutover SQL Server (smoke de endpoints críticos):
+```bash
+npm run test:integration:sqlserver:cutover
+```
+- Incluye limpieza controlada del dominio `cards/*` entre pruebas para evitar colisiones de hash en una base SQL Server compartida.
+- Para limpiar manualmente solo ese dominio:
+```bash
+npm run db:sqlserver:clean:cards
+```
+
+Suite completa de integración sobre SQL Server (secuencial con limpieza total entre archivos):
+```bash
+npm run test:integration:sqlserver:full
+```
+- Requiere `DB_ENGINE=sqlserver`.
+- Limpieza total manual:
+```bash
+npm run db:sqlserver:clean:all
+```
+
 Para modo `external`:
 1. Levantar API con `TRAINING_RUNNER_MODE=external`.
 2. Levantar `npm run worker` con el mismo `DB_PATH`.
 
 Healthcheck:
 - `GET /health`
+- Incluye `db.sqlite`, `db.postgresMirror` y `db.sqlServer` (estado de conexión y flag `dualWriteEnabledByEnv`, sin exponer secretos).
 
 ## Header de plataforma (obligatorio para cliente)
 El backend detecta plataforma con `x-client-platform: desktop | mobile | web`.
@@ -245,6 +384,9 @@ curl -X POST http://localhost:4000/api/training/jobs \
 - [docs/ENDPOINTS_ACS.md](docs/ENDPOINTS_ACS.md)
 - [docs/ROADMAP_FASES.md](docs/ROADMAP_FASES.md)
 - [docs/BACKLOG_FASES_COMPLETO.md](docs/BACKLOG_FASES_COMPLETO.md)
+- [docs/REYCAD_LOWCODING_FASE_3_CIERRE.md](docs/REYCAD_LOWCODING_FASE_3_CIERRE.md)
+- [docs/REYCAD_LOWCODING_FASE_4_5_AVANCE.md](docs/REYCAD_LOWCODING_FASE_4_5_AVANCE.md)
+- [docs/REYCAD_LOWCODING_CIERRE_FINAL.md](docs/REYCAD_LOWCODING_CIERRE_FINAL.md)
 - [docs/UI_STYLE_GUIDE.md](docs/UI_STYLE_GUIDE.md)
 - [docs/QA_FASE_3_1.md](docs/QA_FASE_3_1.md)
 - [docs/RUNBOOK_TRAINING_FASE_3.md](docs/RUNBOOK_TRAINING_FASE_3.md)
@@ -253,3 +395,4 @@ curl -X POST http://localhost:4000/api/training/jobs \
 - [docs/PLAN_LOWCODING_APROBADO_FASE_5.md](docs/PLAN_LOWCODING_APROBADO_FASE_5.md)
 - [docs/PLAN_LOWCODING_APROBADO_FASE_6.md](docs/PLAN_LOWCODING_APROBADO_FASE_6.md)
 - [docs/PLAN_LOWCODING_APROBADO_FASE_7.md](docs/PLAN_LOWCODING_APROBADO_FASE_7.md)
+- [docs/SECURITY_ROTATION_RUNBOOK_2026-03-03.md](docs/SECURITY_ROTATION_RUNBOOK_2026-03-03.md)

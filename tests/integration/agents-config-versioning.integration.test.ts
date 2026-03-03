@@ -3,15 +3,55 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+import { createServer as createNetServer } from "node:net";
 import test from "node:test";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const port = 55350 + Math.floor(Math.random() * 2000);
-const baseUrl = `http://127.0.0.1:${port}`;
+let baseUrl = "";
 const dbPath = path.join(os.tmpdir(), `rey30-int-agent-versioning-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function allocateTestPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!port || port <= 0) {
+          reject(new Error("Failed to allocate test port"));
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
+async function stopServer(server: ChildProcess): Promise<void> {
+  if (server.exitCode !== null) {
+    return;
+  }
+
+  const onExit = new Promise<void>((resolve) => {
+    server.once("exit", () => resolve());
+  });
+
+  server.kill("SIGTERM");
+  await Promise.race([onExit, sleep(1500)]);
+
+  if (server.exitCode === null) {
+    server.kill("SIGKILL");
+    await Promise.race([onExit, sleep(1000)]);
+  }
 }
 
 async function waitForHealth(timeoutMs = 15_000): Promise<void> {
@@ -64,6 +104,9 @@ async function sendJson(
 }
 
 test("agents config versioning supports rollback to previous state", async () => {
+  const port = await allocateTestPort();
+  baseUrl = `http://127.0.0.1:${port}`;
+
   const env = {
     ...process.env,
     PORT: String(port),
@@ -218,8 +261,7 @@ test("agents config versioning supports rollback to previous state", async () =>
     assert.equal(versionsAfterBody.latestVersion, rollbackBody.newVersion);
     assert.ok(versionsAfterBody.items[0]?.reason.startsWith("rollback to v1"));
   } finally {
-    server.kill("SIGTERM");
-    await sleep(300);
+    await stopServer(server);
     if (fs.existsSync(dbPath)) {
       fs.rmSync(dbPath, { force: true });
     }

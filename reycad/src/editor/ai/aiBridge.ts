@@ -1,5 +1,7 @@
 import engineApi from "../../engine/api/engineApi";
 import { parseSimpleDsl } from "../../engine/api/dsl";
+import { getQualitySnapshot, useQualityStore } from "../../engine/runtime/qualityStore";
+import type { MaterialDef } from "../../engine/scenegraph/types";
 import { isToolAllowedByPermissions, loadAiPermissionsLocal, blockedPermissionReasons } from "./aiPermissions";
 import type { AiExecutionResult, AiPermissions, AiToolCall } from "./aiSchema";
 
@@ -133,6 +135,9 @@ function countRequestedNodes(toolCalls: AiToolCall[]): number {
     if (toolCall.tool === "create_primitive") {
       return acc + 1;
     }
+    if (toolCall.tool === "generate_terrain") {
+      return acc + 1;
+    }
     if (toolCall.tool === "insert_template") {
       return acc + 1;
     }
@@ -203,6 +208,71 @@ function validateToolCall(toolCall: AiToolCall): string | null {
 
   if ((toolCall.tool === "export_stl" || toolCall.tool === "export_glb") && toolCall.args.selectionIds && toolCall.args.selectionIds.length > MAX_NODES_PER_REQUEST) {
     return `export selection exceeds max nodes (${MAX_NODES_PER_REQUEST})`;
+  }
+
+  if (toolCall.tool === "set_quality") {
+    const valid = ["auto", "ultra", "high", "medium", "low"];
+    if (!valid.includes(toolCall.args.mode)) {
+      return `set_quality invalid mode (${toolCall.args.mode})`;
+    }
+  }
+
+  if (toolCall.tool === "set_rigidbody" && !toolCall.args.nodeId) {
+    return "set_rigidbody requires nodeId";
+  }
+  if (toolCall.tool === "set_collider" && !toolCall.args.nodeId) {
+    return "set_collider requires nodeId";
+  }
+  if (toolCall.tool === "set_physics_world" && toolCall.args.gravity) {
+    if (!Array.isArray(toolCall.args.gravity) || toolCall.args.gravity.length !== 3) {
+      return "set_physics_world gravity must be [x,y,z]";
+    }
+  }
+  if (toolCall.tool === "set_physics_world" && toolCall.args.runtimeMode) {
+    if (toolCall.args.runtimeMode !== "static" && toolCall.args.runtimeMode !== "arena") {
+      return "set_physics_world runtimeMode must be static|arena";
+    }
+  }
+  if (toolCall.tool === "add_constraint") {
+    if (!toolCall.args.aId || !toolCall.args.bId) {
+      return "add_constraint requires aId and bId";
+    }
+    if (toolCall.args.aId === toolCall.args.bId) {
+      return "add_constraint requires different bodies";
+    }
+  }
+  if (toolCall.tool === "update_constraint" && !toolCall.args.constraintId) {
+    return "update_constraint requires constraintId";
+  }
+  if (toolCall.tool === "remove_constraint" && !toolCall.args.constraintId) {
+    return "remove_constraint requires constraintId";
+  }
+
+  if (toolCall.tool === "raycast_physics") {
+    if (!Array.isArray(toolCall.args.origin) || toolCall.args.origin.length !== 3) {
+      return "raycast_physics origin must be [x,y,z]";
+    }
+    if (!Array.isArray(toolCall.args.direction) || toolCall.args.direction.length !== 3) {
+      return "raycast_physics direction must be [x,y,z]";
+    }
+  }
+
+  if (toolCall.tool === "apply_impulse") {
+    if (!toolCall.args.nodeId) {
+      return "apply_impulse requires nodeId";
+    }
+    if (!Array.isArray(toolCall.args.impulse) || toolCall.args.impulse.length !== 3) {
+      return "apply_impulse impulse must be [x,y,z]";
+    }
+  }
+
+  if (toolCall.tool === "play_battle_clash" && toolCall.args.impulse !== undefined) {
+    if (!Number.isFinite(toolCall.args.impulse)) {
+      return "play_battle_clash impulse must be a finite number";
+    }
+    if (toolCall.args.impulse < 1 || toolCall.args.impulse > 200) {
+      return "play_battle_clash impulse must be in range [1,200]";
+    }
   }
 
   return null;
@@ -344,6 +414,18 @@ function triggerBlobDownload(blob: Blob, filename: string): boolean {
   return true;
 }
 
+function normalizePbrSeed(pbr: { metalness?: number; roughness?: number; baseColor?: string } | undefined): MaterialDef["pbr"] | undefined {
+  if (!pbr) {
+    return undefined;
+  }
+
+  return {
+    metalness: typeof pbr.metalness === "number" ? pbr.metalness : 0.2,
+    roughness: typeof pbr.roughness === "number" ? pbr.roughness : 0.6,
+    baseColor: typeof pbr.baseColor === "string" ? pbr.baseColor : "#cccccc"
+  };
+}
+
 async function executeLocalTool(
   toolCall: Exclude<AiToolCall, { tool: "create_card_draft" | "create_agent" | "assign_agent_tools" | "assign_agent_skills" }>
 ): Promise<AiExecutionResult> {
@@ -356,7 +438,8 @@ async function executeLocalTool(
         nodes: Object.values(snapshot.nodes),
         selection: engineApi.getSelection(),
         units: snapshot.units,
-        grid: snapshot.grid
+        grid: snapshot.grid,
+        physics: snapshot.physics
       }
     };
   }
@@ -430,7 +513,7 @@ async function executeLocalTool(
     const materialId = engineApi.createMaterial(toolCall.args.kind, {
       name: toolCall.args.name,
       color: toolCall.args.color,
-      pbr: toolCall.args.pbr
+      pbr: normalizePbrSeed(toolCall.args.pbr)
     });
     return { ok: true, tool: toolCall.tool, result: { materialId } };
   }
@@ -441,7 +524,7 @@ async function executeLocalTool(
       const materialId = engineApi.createMaterial(seed.kind, {
         name: seed.name,
         color: seed.color,
-        pbr: seed.pbr
+        pbr: normalizePbrSeed(seed.pbr)
       });
       materialIds.push(materialId);
     }
@@ -498,6 +581,169 @@ async function executeLocalTool(
       angleSnap: toolCall.args.angleSnap
     });
     return { ok: true, tool: toolCall.tool };
+  }
+
+  if (toolCall.tool === "set_rigidbody") {
+    engineApi.setNodeRigidBody(toolCall.args.nodeId, {
+      enabled: toolCall.args.enabled,
+      mode: toolCall.args.mode,
+      mass: toolCall.args.mass,
+      gravityScale: toolCall.args.gravityScale,
+      lockRotation: toolCall.args.lockRotation,
+      linearVelocity: toolCall.args.linearVelocity
+    });
+    return { ok: true, tool: toolCall.tool };
+  }
+
+  if (toolCall.tool === "set_collider") {
+    engineApi.setNodeCollider(toolCall.args.nodeId, {
+      enabled: toolCall.args.enabled,
+      shape: toolCall.args.shape,
+      isTrigger: toolCall.args.isTrigger,
+      size: toolCall.args.size,
+      radius: toolCall.args.radius,
+      height: toolCall.args.height
+    });
+    return { ok: true, tool: toolCall.tool };
+  }
+
+  if (toolCall.tool === "set_physics_world") {
+    engineApi.setPhysicsSettings({
+      enabled: toolCall.args.enabled,
+      simulate: toolCall.args.simulate,
+      runtimeMode: toolCall.args.runtimeMode,
+      backend: toolCall.args.backend,
+      gravity: toolCall.args.gravity,
+      floorY: toolCall.args.floorY
+    });
+    return { ok: true, tool: toolCall.tool, result: engineApi.getPhysicsSettings() };
+  }
+
+  if (toolCall.tool === "add_constraint") {
+    const constraintId = engineApi.addPhysicsConstraint({
+      type: "distance",
+      a: toolCall.args.aId,
+      b: toolCall.args.bId,
+      restLength: toolCall.args.restLength ?? 10,
+      stiffness: toolCall.args.stiffness ?? 0.6,
+      damping: toolCall.args.damping ?? 0.1,
+      enabled: toolCall.args.enabled ?? true
+    });
+    return { ok: true, tool: toolCall.tool, result: { constraintId } };
+  }
+
+  if (toolCall.tool === "update_constraint") {
+    engineApi.updatePhysicsConstraint(toolCall.args.constraintId, {
+      a: toolCall.args.patch.aId,
+      b: toolCall.args.patch.bId,
+      restLength: toolCall.args.patch.restLength,
+      stiffness: toolCall.args.patch.stiffness,
+      damping: toolCall.args.patch.damping,
+      enabled: toolCall.args.patch.enabled
+    });
+    return { ok: true, tool: toolCall.tool };
+  }
+
+  if (toolCall.tool === "remove_constraint") {
+    engineApi.removePhysicsConstraint(toolCall.args.constraintId);
+    return { ok: true, tool: toolCall.tool };
+  }
+
+  if (toolCall.tool === "list_constraints") {
+    return { ok: true, tool: toolCall.tool, result: engineApi.listPhysicsConstraints() };
+  }
+
+  if (toolCall.tool === "raycast_physics") {
+    const hit = engineApi.raycastPhysics(toolCall.args.origin, toolCall.args.direction, toolCall.args.maxDistance);
+    return { ok: true, tool: toolCall.tool, result: hit };
+  }
+
+  if (toolCall.tool === "get_physics_events") {
+    const events = engineApi.getPhysicsEvents(toolCall.args.limit ?? 40);
+    return { ok: true, tool: toolCall.tool, result: events };
+  }
+
+  if (toolCall.tool === "clear_physics_events") {
+    engineApi.clearPhysicsEvents();
+    return { ok: true, tool: toolCall.tool };
+  }
+
+  if (toolCall.tool === "apply_impulse") {
+    const applied = engineApi.applyPhysicsImpulse(toolCall.args.nodeId, toolCall.args.impulse);
+    return { ok: true, tool: toolCall.tool, result: { applied } };
+  }
+
+  if (toolCall.tool === "setup_battle_scene") {
+    const state = engineApi.setupBattleScene();
+    return { ok: true, tool: toolCall.tool, result: state };
+  }
+
+  if (toolCall.tool === "play_battle_clash") {
+    const impulse = toolCall.args.impulse;
+    const started = impulse === undefined ? engineApi.playBattleClash() : engineApi.playBattleClash(impulse);
+    return {
+      ok: true,
+      tool: toolCall.tool,
+      result: {
+        started,
+        state: engineApi.getBattleSceneState()
+      }
+    };
+  }
+
+  if (toolCall.tool === "stop_battle_scene") {
+    engineApi.stopBattleScene();
+    return { ok: true, tool: toolCall.tool, result: { stopped: true } };
+  }
+
+  if (toolCall.tool === "set_quality") {
+    useQualityStore.getState().setMode(toolCall.args.mode);
+    return {
+      ok: true,
+      tool: toolCall.tool,
+      result: getQualitySnapshot()
+    };
+  }
+
+  if (toolCall.tool === "get_engine_status") {
+    const snapshot = engineApi.getProjectSnapshot();
+    const quality = getQualitySnapshot();
+    const primitives = Object.values(snapshot.nodes).filter((node) => node.type === "primitive").length;
+    const groups = Object.values(snapshot.nodes).filter((node) => node.type === "group").length;
+    const rigidBodies = Object.values(snapshot.nodes).filter((node) => Boolean(node.rigidBody)).length;
+    const colliders = Object.values(snapshot.nodes).filter((node) => Boolean(node.collider)).length;
+
+    return {
+      ok: true,
+      tool: toolCall.tool,
+      result: {
+        quality,
+        physics: engineApi.getPhysicsSettings(),
+        nodes: {
+          total: Object.keys(snapshot.nodes).length,
+          primitives,
+          groups,
+          rigidBodies,
+          colliders,
+          selection: engineApi.getSelection().length
+        },
+        grid: snapshot.grid,
+        units: snapshot.units
+      }
+    };
+  }
+
+  if (toolCall.tool === "generate_terrain") {
+    const params = toolCall.args.params ?? {};
+    const terrainParams = {
+      w: typeof params.w === "number" ? params.w : 120,
+      d: typeof params.d === "number" ? params.d : 120,
+      segments: typeof params.segments === "number" ? params.segments : 48,
+      heightSeed: typeof params.heightSeed === "number" ? params.heightSeed : 1337,
+      heightScale: typeof params.heightScale === "number" ? params.heightScale : 8
+    };
+    const nodeId = engineApi.createPrimitive("terrain", terrainParams, toolCall.args.transform, toolCall.args.materialId);
+    return { ok: true, tool: toolCall.tool, result: { nodeId } };
   }
 
   if (toolCall.tool === "export_stl") {
@@ -668,9 +914,17 @@ function normalizeRemoteToolCalls(payload: unknown): AiToolCall[] | null {
 function buildSceneDigest(): Record<string, unknown> {
   const snapshot = engineApi.getProjectSnapshot();
   const nodes = Object.values(snapshot.nodes).slice(0, 220);
+  const quality = getQualitySnapshot();
   return {
     units: snapshot.units,
     grid: snapshot.grid,
+    physics: snapshot.physics,
+    quality: {
+      mode: quality.mode,
+      effectiveLevel: quality.effectiveLevel,
+      fps: quality.fps,
+      frameMs: quality.frameMs
+    },
     selection: engineApi.getSelection(),
     nodes: nodes.map((node) => ({
       id: node.id,
@@ -679,6 +933,8 @@ function buildSceneDigest(): Record<string, unknown> {
       parentId: node.parentId,
       mode: node.mode,
       materialId: node.materialId,
+      rigidBody: node.rigidBody,
+      collider: node.collider,
       transform: node.transform,
       primitive: node.type === "primitive" ? node.primitive : undefined,
       params: node.type === "primitive" ? node.params : undefined
@@ -740,10 +996,112 @@ async function fetchRemoteToolCalls(prompt: string, permissions: AiPermissions):
 function inferToolCallsFromPromptLocal(prompt: string): AiToolCall[] {
   const command = parseSimpleDsl(prompt);
   if (command.kind === "create") {
+    if (command.primitive === "terrain") {
+      return [{ tool: "generate_terrain", args: {} }];
+    }
     return [{ tool: "create_primitive", args: { primitive: command.primitive } }];
   }
 
   const normalized = prompt.toLowerCase();
+  const impulseMatch = normalized.match(/(?:impulse|impulso)\s*[:=]?\s*(-?\d+(?:\.\d+)?)/);
+  const requestedImpulse = impulseMatch ? Number(impulseMatch[1]) : undefined;
+  const battleImpulse =
+    requestedImpulse !== undefined && Number.isFinite(requestedImpulse) ? Math.max(1, Math.min(200, requestedImpulse)) : 16;
+
+  if (normalized.includes("engine status") || normalized.includes("estado motor") || normalized.includes("estado del motor")) {
+    return [{ tool: "get_engine_status", args: {} }];
+  }
+
+  if (normalized.includes("calidad auto") || normalized.includes("quality auto")) {
+    return [{ tool: "set_quality", args: { mode: "auto" } }];
+  }
+  if (normalized.includes("calidad ultra") || normalized.includes("quality ultra")) {
+    return [{ tool: "set_quality", args: { mode: "ultra" } }];
+  }
+  if (normalized.includes("calidad alta") || normalized.includes("quality high")) {
+    return [{ tool: "set_quality", args: { mode: "high" } }];
+  }
+  if (normalized.includes("calidad media") || normalized.includes("quality medium")) {
+    return [{ tool: "set_quality", args: { mode: "medium" } }];
+  }
+  if (normalized.includes("calidad baja") || normalized.includes("quality low")) {
+    return [{ tool: "set_quality", args: { mode: "low" } }];
+  }
+
+  if (
+    normalized.includes("setup battle") ||
+    normalized.includes("setup_battle_scene") ||
+    normalized.includes("configura batalla") ||
+    normalized.includes("preparar batalla")
+  ) {
+    return [{ tool: "setup_battle_scene", args: {} }];
+  }
+  if (
+    normalized.includes("stop battle") ||
+    normalized.includes("stop_battle_scene") ||
+    normalized.includes("detener batalla") ||
+    normalized.includes("parar batalla")
+  ) {
+    return [{ tool: "stop_battle_scene", args: {} }];
+  }
+  if (
+    normalized.includes("play clash") ||
+    normalized.includes("battle clash") ||
+    normalized.includes("play_battle_clash") ||
+    normalized.includes("iniciar batalla") ||
+    normalized.includes("inicia batalla") ||
+    normalized.includes("clash batalla") ||
+    normalized.includes("duelo")
+  ) {
+    return [{ tool: "play_battle_clash", args: { impulse: battleImpulse } }];
+  }
+  if (normalized.includes("battle") || normalized.includes("batalla")) {
+    return [
+      { tool: "setup_battle_scene", args: {} },
+      { tool: "play_battle_clash", args: { impulse: battleImpulse } }
+    ];
+  }
+
+  if (normalized.includes("activar fisica") || normalized.includes("enable physics")) {
+    return [{ tool: "set_physics_world", args: { enabled: true, simulate: true, runtimeMode: "arena" } }];
+  }
+  if (normalized.includes("desactivar fisica") || normalized.includes("disable physics")) {
+    return [{ tool: "set_physics_world", args: { enabled: false, runtimeMode: "static" } }];
+  }
+  if (normalized.includes("gravedad") || normalized.includes("gravity")) {
+    return [{ tool: "set_physics_world", args: { enabled: true, simulate: true, runtimeMode: "arena", gravity: [0, -9.81, 0] } }];
+  }
+  if (normalized.includes("rigidbody") || normalized.includes("collider")) {
+    return [{ tool: "get_scene", args: {} }];
+  }
+  if (normalized.includes("impulso") || normalized.includes("impulse") || normalized.includes("empuja")) {
+    const nodeId = engineApi.getSelection()[0];
+    if (!nodeId) {
+      return [{ tool: "get_scene", args: {} }];
+    }
+    return [{ tool: "apply_impulse", args: { nodeId, impulse: [0, 8, 0] } }];
+  }
+  if (normalized.includes("constraint") || normalized.includes("restriccion") || normalized.includes("restricción") || normalized.includes("joint")) {
+    return [{ tool: "list_constraints", args: {} }];
+  }
+  if (normalized.includes("raycast")) {
+    return [{ tool: "raycast_physics", args: { origin: [0, 100, 0], direction: [0, -1, 0], maxDistance: 1000 } }];
+  }
+  if (normalized.includes("eventos fisica") || normalized.includes("physics events")) {
+    return [{ tool: "get_physics_events", args: { limit: 40 } }];
+  }
+
+  if (normalized.includes("genera terreno") || normalized.includes("generate terrain")) {
+    return [
+      {
+        tool: "generate_terrain",
+        args: {
+          params: { w: 160, d: 160, segments: 56, heightSeed: 241, heightScale: 12 }
+        }
+      }
+    ];
+  }
+
   if (normalized.includes("scene") || normalized.includes("estado")) {
     return [{ tool: "get_scene", args: {} }];
   }

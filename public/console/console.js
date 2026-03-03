@@ -20,6 +20,8 @@ const TAB_MODULE_MAP = {
   skills: "skillsCatalog",
   tools: "tools",
   memory: "memory",
+  training: "training",
+  trainingOps: "trainingOps",
   sandbox: "sandbox",
   marketplace: "marketplace"
 };
@@ -42,7 +44,10 @@ function newWorkspace() {
     selectedTemplateId: "",
     lastSkillRun: null,
     lastSandbox: null,
-    lastImport: null
+    lastImport: null,
+    trainingOpsMetrics: null,
+    trainingOpsAlerts: [],
+    trainingOpsDlqItems: []
   };
 }
 
@@ -85,6 +90,15 @@ const elements = {
   trainingForm: document.getElementById("console-training-form"),
   trainingList: document.getElementById("console-job-list"),
   trainingCount: document.getElementById("console-job-count"),
+  trainingOpsMetrics: document.getElementById("console-training-ops-metrics"),
+  trainingOpsAlerts: document.getElementById("console-training-ops-alerts"),
+  trainingOpsDlqList: document.getElementById("console-training-ops-dlq-list"),
+  trainingOpsDlqLimit: document.getElementById("console-training-ops-dlq-limit"),
+  trainingOpsDlqOffset: document.getElementById("console-training-ops-dlq-offset"),
+  trainingOpsRemoveOriginal: document.getElementById("console-training-ops-remove-original"),
+  trainingOpsRefreshMetricsBtn: document.getElementById("console-training-ops-refresh-metrics"),
+  trainingOpsRefreshDlqBtn: document.getElementById("console-training-ops-refresh-dlq"),
+  trainingOpsBatchRequeueBtn: document.getElementById("console-training-ops-dlq-batch-requeue"),
   agentCreateForm: document.getElementById("console-agent-create-form"),
   agentCreateName: document.getElementById("console-agent-create-name"),
   agentCreateRole: document.getElementById("console-agent-create-role"),
@@ -734,6 +748,92 @@ function renderMarketplace() {
   }
 }
 
+function parseBoundedInteger(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  const rounded = Math.trunc(numeric);
+  return Math.min(max, Math.max(min, rounded));
+}
+
+function trainingOpsQueryFromInputs() {
+  const limit = parseBoundedInteger(elements.trainingOpsDlqLimit.value, 20, 1, 200);
+  const offset = parseBoundedInteger(elements.trainingOpsDlqOffset.value, 0, 0, 20_000);
+  elements.trainingOpsDlqLimit.value = String(limit);
+  elements.trainingOpsDlqOffset.value = String(offset);
+  return { limit, offset };
+}
+
+function renderTrainingOps() {
+  const metricsError = state.workspace.errors.trainingOpsMetrics;
+  const metrics = state.workspace.trainingOpsMetrics;
+  if (metricsError) {
+    elements.trainingOpsMetrics.className = "console-empty";
+    elements.trainingOpsMetrics.textContent = metricsError;
+  } else if (!metrics) {
+    elements.trainingOpsMetrics.className = "console-empty";
+    elements.trainingOpsMetrics.textContent = "Training queue metrics pending.";
+  } else {
+    elements.trainingOpsMetrics.className = "console-profile-grid";
+    elements.trainingOpsMetrics.innerHTML = `
+      <article class="console-profile-cell"><strong>Backend</strong><span>${escapeHtml(metrics.backend || "-")}</span></article>
+      <article class="console-profile-cell"><strong>Queue</strong><span>${escapeHtml(metrics.queueName || "-")}</span></article>
+      <article class="console-profile-cell"><strong>DLQ</strong><span>${escapeHtml(metrics.dlqName || "-")}</span></article>
+      <article class="console-profile-cell"><strong>Updated</strong><span>${escapeHtml(formatDateTime(metrics.timestamp))}</span></article>
+      <article class="console-profile-cell"><strong>Main waiting/active</strong><span>${escapeHtml(metrics.queue?.waiting ?? 0)} / ${escapeHtml(metrics.queue?.active ?? 0)}</span></article>
+      <article class="console-profile-cell"><strong>Main failed/delayed</strong><span>${escapeHtml(metrics.queue?.failed ?? 0)} / ${escapeHtml(metrics.queue?.delayed ?? 0)}</span></article>
+      <article class="console-profile-cell"><strong>DLQ waiting/active</strong><span>${escapeHtml(metrics.dlq?.waiting ?? 0)} / ${escapeHtml(metrics.dlq?.active ?? 0)}</span></article>
+      <article class="console-profile-cell"><strong>DLQ failed/delayed</strong><span>${escapeHtml(metrics.dlq?.failed ?? 0)} / ${escapeHtml(metrics.dlq?.delayed ?? 0)}</span></article>
+    `;
+  }
+
+  elements.trainingOpsAlerts.innerHTML = "";
+  const alerts = Array.isArray(state.workspace.trainingOpsAlerts) ? state.workspace.trainingOpsAlerts : [];
+  if (alerts.length === 0) {
+    elements.trainingOpsAlerts.innerHTML = '<li class="console-item"><p class="console-item-meta">No queue alerts.</p></li>';
+  } else {
+    for (const alert of alerts) {
+      const li = document.createElement("li");
+      li.className = "console-item";
+      li.innerHTML = `<p class="console-item-meta">${escapeHtml(alert)}</p>`;
+      elements.trainingOpsAlerts.appendChild(li);
+    }
+  }
+
+  elements.trainingOpsDlqList.innerHTML = "";
+  if (state.workspace.errors.trainingOpsDlq) {
+    elements.trainingOpsDlqList.innerHTML = `<li class="console-item"><p class="console-item-meta">${escapeHtml(state.workspace.errors.trainingOpsDlq)}</p></li>`;
+    return;
+  }
+
+  const items = Array.isArray(state.workspace.trainingOpsDlqItems) ? state.workspace.trainingOpsDlqItems : [];
+  if (items.length === 0) {
+    elements.trainingOpsDlqList.innerHTML = '<li class="console-item"><p class="console-item-meta">DLQ empty.</p></li>';
+    return;
+  }
+
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "console-item";
+    li.innerHTML = `
+      <div class="console-item-top">
+        <div>
+          <h3 class="console-item-title">${escapeHtml(item.payload?.jobId || "unknown-job")}</h3>
+          <p class="console-item-meta">${escapeHtml(item.payload?.reason || "no reason")}</p>
+          <p class="console-item-meta mono">dlq=${escapeHtml(item.id)} · state=${escapeHtml(item.state)} · attempts=${escapeHtml(item.attemptsMade)}</p>
+          <p class="console-item-meta mono">failedAt=${escapeHtml(formatDateTime(item.payload?.failedAt))}</p>
+        </div>
+        <span class="ui-badge ${badgeClassForStatus(item.state)}">${escapeHtml(item.state || "unknown")}</span>
+      </div>
+      <div class="console-item-actions">
+        <button type="button" class="ui-btn ui-btn-secondary" data-training-ops-requeue-id="${escapeHtml(item.id)}">Requeue</button>
+      </div>
+    `;
+    elements.trainingOpsDlqList.appendChild(li);
+  }
+}
+
 function renderWorkspace() {
   renderWorkspaceSelectors();
   renderAgents();
@@ -742,6 +842,7 @@ function renderWorkspace() {
   renderSkills();
   renderTools();
   renderMemories();
+  renderTrainingOps();
   renderSandbox();
   renderMarketplace();
 }
@@ -786,6 +887,31 @@ async function loadJobs() {
   const response = await apiFetch("/api/training/jobs");
   state.jobs = Array.isArray(response?.items) ? response.items : [];
   renderJobs();
+}
+
+async function loadTrainingOpsMetrics() {
+  try {
+    const response = await apiFetch("/api/admin/training/queue-metrics");
+    state.workspace.trainingOpsMetrics = response;
+    state.workspace.trainingOpsAlerts = Array.isArray(response?.alerts) ? response.alerts : [];
+    state.workspace.errors.trainingOpsMetrics = null;
+  } catch (error) {
+    state.workspace.trainingOpsMetrics = null;
+    state.workspace.trainingOpsAlerts = [];
+    state.workspace.errors.trainingOpsMetrics = error.message || String(error);
+  }
+}
+
+async function loadTrainingOpsDlq() {
+  const { limit, offset } = trainingOpsQueryFromInputs();
+  try {
+    const response = await apiFetch(`/api/admin/training/dlq?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`);
+    state.workspace.trainingOpsDlqItems = Array.isArray(response?.items) ? response.items : [];
+    state.workspace.errors.trainingOpsDlq = null;
+  } catch (error) {
+    state.workspace.trainingOpsDlqItems = [];
+    state.workspace.errors.trainingOpsDlq = error.message || String(error);
+  }
 }
 
 async function loadSafe(key, runner, fallback = []) {
@@ -888,6 +1014,15 @@ async function loadWorkspace() {
   await loadProjectRules();
   if (state.workspace.selectedAgentId) {
     await loadAgentDetail(state.workspace.selectedAgentId);
+  }
+  if (tabAllowed("trainingOps").allowed) {
+    await Promise.all([loadTrainingOpsMetrics(), loadTrainingOpsDlq()]);
+  } else {
+    state.workspace.trainingOpsMetrics = null;
+    state.workspace.trainingOpsAlerts = [];
+    state.workspace.trainingOpsDlqItems = [];
+    state.workspace.errors.trainingOpsMetrics = null;
+    state.workspace.errors.trainingOpsDlq = null;
   }
   renderWorkspace();
   setWorkspaceStatus("Workspace ready", "success");
@@ -1360,6 +1495,86 @@ function bindWorkspaceEvents() {
       handleError(error);
     }
   });
+
+  elements.trainingOpsRefreshMetricsBtn.addEventListener("click", async () => {
+    if (!requireTab("trainingOps")) {
+      return;
+    }
+    try {
+      await loadTrainingOpsMetrics();
+      renderTrainingOps();
+      showToast("Training queue metrics refreshed", { variant: "info" });
+    } catch (error) {
+      handleError(error);
+    }
+  });
+
+  elements.trainingOpsRefreshDlqBtn.addEventListener("click", async () => {
+    if (!requireTab("trainingOps")) {
+      return;
+    }
+    try {
+      await loadTrainingOpsDlq();
+      renderTrainingOps();
+      showToast("Training DLQ refreshed", { variant: "info" });
+    } catch (error) {
+      handleError(error);
+    }
+  });
+
+  elements.trainingOpsBatchRequeueBtn.addEventListener("click", async () => {
+    if (!requireTab("trainingOps")) {
+      return;
+    }
+    const removeOriginal = elements.trainingOpsRemoveOriginal.value === "true";
+    const { limit, offset } = trainingOpsQueryFromInputs();
+    try {
+      const result = await apiFetch("/api/admin/training/dlq/requeue-batch", {
+        method: "POST",
+        body: {
+          limit,
+          offset,
+          removeOriginal,
+          states: ["waiting", "delayed", "failed", "active"]
+        }
+      });
+      await Promise.all([loadTrainingOpsMetrics(), loadTrainingOpsDlq(), loadJobs()]);
+      renderTrainingOps();
+      const requeued = Number(result?.requeued ?? 0);
+      const failed = Number(result?.failed ?? 0);
+      showToast(`DLQ batch requeue: requeued=${requeued} failed=${failed}`, { variant: failed > 0 ? "warning" : "success" });
+    } catch (error) {
+      handleError(error);
+    }
+  });
+
+  elements.trainingOpsDlqList.addEventListener("click", async (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const actionNode = target?.closest("[data-training-ops-requeue-id]");
+    if (!actionNode) {
+      return;
+    }
+    if (!requireTab("trainingOps")) {
+      return;
+    }
+    const dlqJobId = actionNode.getAttribute("data-training-ops-requeue-id");
+    if (!dlqJobId) {
+      return;
+    }
+    try {
+      await apiFetch(`/api/admin/training/dlq/${encodeURIComponent(dlqJobId)}/requeue`, {
+        method: "POST",
+        body: {
+          removeOriginal: elements.trainingOpsRemoveOriginal.value === "true"
+        }
+      });
+      await Promise.all([loadTrainingOpsMetrics(), loadTrainingOpsDlq(), loadJobs()]);
+      renderTrainingOps();
+      showToast("DLQ job requeued", { variant: "success" });
+    } catch (error) {
+      handleError(error);
+    }
+  });
 }
 
 function bindEvents() {
@@ -1502,6 +1717,9 @@ function bindEvents() {
     event.preventDefault();
     if (!state.token) {
       showToast("Inicia sesion primero", { variant: "info" });
+      return;
+    }
+    if (!requireTab("training")) {
       return;
     }
 

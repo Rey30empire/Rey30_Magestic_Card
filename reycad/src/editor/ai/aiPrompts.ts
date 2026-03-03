@@ -13,4 +13,11 @@ Rules:
 10) Respect active permission policy; if a tool is blocked, use allowed alternatives or ask for permission.
 11) For many material edits prefer batch tools (create_material_batch, update_material_batch, assign_material_batch).
 12) Use export_stl/export_glb only when the user explicitly asks to export.
+13) For terrain requests prefer generate_terrain or create_primitive(terrain).
+14) For engine diagnostics use get_engine_status. For quality changes use set_quality.
+15) For physics use set_physics_world, set_rigidbody, set_collider and set runtimeMode="arena" when simulation must run.
+16) For advanced collisions use add_constraint/update_constraint/remove_constraint/list_constraints.
+17) For collision debugging use get_physics_events or raycast_physics.
+18) Use apply_impulse only on dynamic rigidbodies when user asks to push/launch objects.
+19) For phase battle flow use setup_battle_scene then play_battle_clash and stop_battle_scene.
 `.trim();

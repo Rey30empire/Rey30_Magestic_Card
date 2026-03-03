@@ -63,6 +63,10 @@ type CardVersionRow = {
   created_at: string;
 };
 
+type IdRow = {
+  id: string;
+};
+
 type CardSnapshot = {
   id: string;
   ownerUserId: string;
@@ -123,6 +127,22 @@ async function safeRollback(): Promise<void> {
   } catch {
     // Ignore rollback errors when transaction was not started.
   }
+}
+
+async function hasDuplicateCardHash(cardHash: string, excludeCardId?: string): Promise<boolean> {
+  const where = excludeCardId ? "card_hash = ? AND id != ?" : "card_hash = ?";
+  const params = excludeCardId ? [cardHash, excludeCardId] : [cardHash];
+  const existing = await get<IdRow>(`SELECT id FROM cards WHERE ${where} LIMIT 1`, params);
+  return Boolean(existing?.id);
+}
+
+async function hasDuplicateActiveDraftFingerprint(userId: string, fingerprint: string, excludeDraftId?: string): Promise<boolean> {
+  const where = excludeDraftId
+    ? "owner_user_id = ? AND fingerprint = ? AND status IN ('draft', 'validated') AND id != ?"
+    : "owner_user_id = ? AND fingerprint = ? AND status IN ('draft', 'validated')";
+  const params = excludeDraftId ? [userId, fingerprint, excludeDraftId] : [userId, fingerprint];
+  const existing = await get<IdRow>(`SELECT id FROM card_drafts WHERE ${where} LIMIT 1`, params);
+  return Boolean(existing?.id);
 }
 
 function mapCard(card: CardRow): CardSnapshot {
@@ -291,6 +311,14 @@ cardsRouter.post("/", authRequired, async (req, res) => {
     updatedAt: now
   };
 
+  if (await hasDuplicateCardHash(card.cardHash)) {
+    res.status(409).json({
+      error: "An identical card already exists",
+      cardHash: card.cardHash
+    });
+    return;
+  }
+
   try {
     await run("BEGIN TRANSACTION");
 
@@ -398,6 +426,11 @@ cardsRouter.post("/drafts", authRequired, async (req, res) => {
   const draftId = randomUUID();
   const now = new Date().toISOString();
   const evaluation = evaluateDraft(parsed.data);
+
+  if (await hasDuplicateActiveDraftFingerprint(req.user!.id, evaluation.fingerprint)) {
+    res.status(409).json({ error: "An equivalent draft already exists for this user" });
+    return;
+  }
 
   try {
     await run(
@@ -520,6 +553,11 @@ cardsRouter.patch("/drafts/:draftId", authRequired, async (req, res) => {
   const evaluation = evaluateDraft(merged.data);
   const now = new Date().toISOString();
   const nextVersion = draft.version + 1;
+
+  if (await hasDuplicateActiveDraftFingerprint(req.user!.id, evaluation.fingerprint, draft.id)) {
+    res.status(409).json({ error: "An equivalent draft already exists for this user" });
+    return;
+  }
 
   try {
     await run(
@@ -684,6 +722,14 @@ cardsRouter.post("/drafts/:draftId/publish", authRequired, async (req, res) => {
     updatedAt: now
   };
 
+  if (await hasDuplicateCardHash(card.cardHash)) {
+    res.status(409).json({
+      error: "An identical card already exists",
+      cardHash: card.cardHash
+    });
+    return;
+  }
+
   try {
     await run("BEGIN TRANSACTION");
 
@@ -805,6 +851,11 @@ cardsRouter.post("/:id/clone-draft", authRequired, async (req, res) => {
   const now = new Date().toISOString();
   const draftId = randomUUID();
 
+  if (await hasDuplicateActiveDraftFingerprint(req.user!.id, evaluation.fingerprint)) {
+    res.status(409).json({ error: "An equivalent draft already exists for this user" });
+    return;
+  }
+
   try {
     await run(
       `
@@ -915,6 +966,11 @@ cardsRouter.post("/:id/revert", authRequired, async (req, res) => {
   const revertedCardRecord = buildCardRecord(req.user!.id, toCreateCardInput(revertPayload.data));
   const now = new Date().toISOString();
   const nextVersion = card.version + 1;
+
+  if (await hasDuplicateCardHash(revertedCardRecord.cardHash, card.id)) {
+    res.status(409).json({ error: "Revert would create a duplicate card hash" });
+    return;
+  }
 
   try {
     await run("BEGIN TRANSACTION");

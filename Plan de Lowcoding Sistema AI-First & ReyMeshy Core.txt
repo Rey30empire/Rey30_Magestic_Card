@@ -1,0 +1,189 @@
+Plan de Lowcoding: Sistema AI-First & ReyMeshy Core
+1. El Corazón Simbiótico: ReyMeshy (Rust + WASM)
+Para no usar librerías viejas y lentas, crearemos un núcleo de geometría moderno.
+
+Librerías a usar: polymesh (geometría), meshopt-rs (optimización), rapier3d (física rápida en Rust).
+
+Lo que hay que crear:
+
+Directorio /reymeshy con Cargo.toml.
+
+Módulo de Voxel-Remesh: Convierte nubes de puntos de la IA en mallas sólidas.
+
+Bridge WASM-Bindgen: Para que WebGL hable con Rust a velocidad nativa.
+
+2. Gestión de Energía: El "VRAM Sentinel" (Toggle System)
+Este es el sistema de "switches" que pediste para que la app no explote si la RAM se llena.
+
+Módulo: VRAMManager.java + ToggleStore.ts.
+
+Lógica de "Graceful Degradation":
+
+Modo Ultra: IA Generativa 3D + Renderizado PBR + Física Completa (Uso: ~18GB VRAM).
+
+Modo Creative: IA desactivada (Toggle OFF) -> Se libera VRAM para el Mesh Edit Mode avanzado (Uso: ~6GB VRAM).
+
+Modo Play: Solo lógica de juego y assets optimizados (Uso: ~2GB VRAM).
+
+Implementación: Cada modelo (Ollama, Llama.cpp, vLLM) se carga con un flag --lazy-load o se mata el proceso mediante el MCP Gateway cuando el switch está en OFF.
+
+3. El Pipeline de Generación "Limpia" (Fine-Tuning & Ingest)
+Para que la IA no entregue basura, usaremos el Asset Vault como filtro.
+
+Descargas Necesarias (Modelos de última generación):
+
+LLM: DeepSeek-Coder-V2 o Llama-3 (vía Ollama) para el código de los minijuegos.
+
+3D Gen: InstantMesh (Local via Python worker) para convertir imágenes en 3D.
+
+Limpiador: SAM (Segment Anything Model) para identificar partes del cuerpo en la malla automáticamente.
+
+Proceso:
+
+Generación: IA crea el modelo.
+
+Vault Ingest: Se guarda en el Asset Vault con un hash único (Dedupe).
+
+ReyMeshy Fix: El worker de Rust detecta el nuevo asset y le aplica el Auto-Remesh y Auto-UV.
+
+🛠️ Roadmap de Implementación (Pasos a Seguir)
+Paso A: Estructura de Archivos y "ReyMeshy"
+Ejecutar cargo init --lib reymeshy.
+
+Configurar el MCP Gateway para que reconozca a reymeshy como una herramienta (tool) de edición de geometría.
+
+Paso B: El Panel de Control (UI)
+Crear el SystemStatusPanel en la consola.
+
+Añadir los Toggles de Hardware:
+
+[ON/OFF] AI Mesh Generation
+
+[ON/OFF] Real-time Physics
+
+[ON/OFF] High-Res Textures
+
+Paso C: Integración del Asset Vault
+Implementar VaultManager.js que use IndexedDB en el navegador para caché y el backend en Java para persistencia.
+
+Crear la función injectToEngine(assetId) que mande el modelo procesado por Rust directamente a la escena de WebGL.
+
+📋 Lista de Compras (Lo que hay que descargar/instalar)
+Backend: Instalar PostgreSQL (para dejar SQLite) y Redis (para la cola de mensajes de la IA).
+
+Rust Toolchain: rustup para compilar el core de geometría.
+
+Modelos:
+
+ollama pull llama3:8b (Para lógica de agentes).
+
+Descargar pesos de InstantMesh desde HuggingFace (para el worker 3D).
+
+🚨 Recomendación Estratégica
+Como tengo 24GB de VRAM, te sugiero asignar 12GB fijos para el MLL de generación y dejar los otros 12GB para el motor 3D y el sistema operativo. Si activas el "Modo Entrenamiento", el sistema debe apagar automáticamente el motor de renderizado para no saturar la tarjeta.
+Infraestructura para crear el puente entre tu MCP (Model Context Protocol) y el Gateway Nativo. El objetivo es que tus agentes (IA) puedan "tocar" el motor de Rust y los modelos de 24GB de VRAM sin romper nada.
+
+Usaremos un patrón de Sidecar en Rust para la geometría y un Orquestador en Java para el Gateway MCP.
+
+1. El Manifiesto del MCP Gateway (mcp-config.json)
+Este archivo define qué "herramientas" tiene la IA para manipular tu motor.
+
+JSON
+{
+  "mcp_gateway": {
+    "name": "Rey30-AI-Gateway",
+    "version": "1.0.0-alpha",
+    "capabilities": {
+      "geometry_edit": true,
+      "vram_management": true,
+      "asset_vault_access": true
+    },
+    "runtime": {
+      "gpu_vram_limit_mb": 24576,
+      "fallback_mode": "cpu_only_logic"
+    }
+  }
+}
+2. Implementación del Gateway (Java + Spring/Vert.x)
+Este servicio escucha a los agentes y decide si hay RAM suficiente para ejecutar la tarea.
+
+McpGatewayController.java
+Java
+@RestController
+@RequestMapping("/api/mcp/gateway")
+public class McpGatewayController {
+
+    @Autowired
+    private VramSentinel vramSentinel; // Control de los 24GB
+
+    @PostMapping("/execute")
+    public ResponseEntity<McpResponse> handleAiRequest(@RequestBody McpCommand cmd) {
+        // 1. Verificar si el Toggle de la función está ON
+        if (!vramSentinel.isFeatureEnabled(cmd.getFeatureId())) {
+            return ResponseEntity.status(503).body(new McpResponse("Feature disabled by VRAM constraints"));
+        }
+
+        // 2. Enviar a Rust (ReyMeshy) si es una tarea de geometría
+        if (cmd.getType().equals("GEOMETRY_CLEANUP")) {
+            return rustBridge.processMesh(cmd.getPayload());
+        }
+
+        return ResponseEntity.ok(new McpResponse("Command queued"));
+    }
+}
+3. El Core de Conexión en Rust (reymeshy/src/lib.rs)
+Aquí es donde ocurre la magia de "limpiar" la malla que la IA generó. Usaremos serde para que Java y Rust hablen el mismo idioma (JSON/Binary).
+
+Rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct MeshData {
+    pub vertices: Vec<f32>,
+    pub indices: Vec<u32>,
+}
+
+#[no_mangle]
+pub extern "C" fn clean_ai_mesh(data: *const u8, len: usize) -> *mut MeshData {
+    // 1. Recibir la malla sucia de la IA
+    let raw_mesh = parse_mesh(data, len);
+
+    // 2. Aplicar Remesh (Librería moderna: polymesh)
+    let clean_mesh = reymeshy::remesh_strategy_v1(raw_mesh);
+
+    // 3. Devolver al Gateway para que WebGL lo pinte
+    Box::into_raw(Box::new(clean_mesh))
+}
+4. El Toggle Switch UI (Frontend WebGL/React)
+Este es el "botón de pánico" o ahorro de energía que pediste.
+
+JavaScript
+// ToggleStore.js
+const useVramToggles = create((set) => ({
+  aiGeneration: true,
+  meshCleaner: true,
+  physics: true,
+  
+  toggleFeature: (feature) => set((state) => {
+    const newState = !state[feature];
+    // Notificar al MCP Gateway para liberar memoria en el backend
+    McpGateway.updateStatus(feature, newState);
+    return { [feature]: newState };
+  }),
+}));
+5. El Plan de Acción (Lo que hay que ejecutar YA)
+Paso 1: Instalar el Conector MCP
+Necesitas instalar el SDK de MCP en tu entorno de desarrollo:
+npm install @modelcontextprotocol/sdk (para el lado de la consola).
+
+Paso 2: Crear el Worker de "Limpieza"
+No descargues librerías de 2015. Usa estas en tu Cargo.toml:
+
+topolzip: Para compresión de mallas rápida.
+
+parry3d: Para colisiones en tiempo real.
+
+meshopt: Para el LOD (Level of Detail) automático.
+
+Paso 3: Configurar el "VRAM Switch"
+En tu backend de Java, crea un Watchdog que monitoree la GPU de 24GB. Si el uso sube de 22GB, el Gateway debe enviar un comando SHUTDOWN_NON_ESSENTIAL a todos los agentes del MCP.

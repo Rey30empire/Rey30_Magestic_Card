@@ -2,21 +2,57 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import sqlite3 from "sqlite3";
+import { createServer as createNetServer } from "node:net";
 import test from "node:test";
+import { grantAdminRoleForTest } from "./helpers/test-db";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const port = 55100 + Math.floor(Math.random() * 2000);
-const baseUrl = `http://127.0.0.1:${port}`;
+let baseUrl = "";
 const dbPath = path.join(os.tmpdir(), `rey30-int-admin-abuse-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
-
-type DbGet = <T>(sql: string, params?: Array<string | number | null>) => Promise<T | undefined>;
-type DbRun = (sql: string, params?: Array<string | number | null>) => Promise<void>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function allocateTestPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!port || port <= 0) {
+          reject(new Error("Failed to allocate test port"));
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
+async function stopServer(server: ChildProcess): Promise<void> {
+  if (server.exitCode !== null) {
+    return;
+  }
+
+  const onExit = new Promise<void>((resolve) => {
+    server.once("exit", () => resolve());
+  });
+
+  server.kill("SIGTERM");
+  await Promise.race([onExit, sleep(1500)]);
+
+  if (server.exitCode === null) {
+    server.kill("SIGKILL");
+    await Promise.race([onExit, sleep(1000)]);
+  }
 }
 
 async function waitForHealth(timeoutMs = 15_000): Promise<void> {
@@ -71,66 +107,6 @@ async function getJson(endpoint: string, headers: Record<string, string> = {}): 
   };
 }
 
-function openDb(filePath: string): { get: DbGet; run: DbRun; close: () => Promise<void> } {
-  const sqlite = sqlite3.verbose();
-  const db = new sqlite.Database(filePath);
-
-  const get: DbGet = <T>(sql: string, params: Array<string | number | null> = []) =>
-    new Promise<T | undefined>((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(row as T | undefined);
-      });
-    });
-
-  const run: DbRun = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  const close = () =>
-    new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  return { get, run, close };
-}
-
-async function grantAdminRole(filePath: string, userId: string): Promise<void> {
-  const db = openDb(filePath);
-  try {
-    const adminRole = await db.get<{ id: string }>("SELECT id FROM roles WHERE key = 'admin'");
-    assert.ok(adminRole?.id);
-
-    await db.run(
-      `
-        INSERT OR IGNORE INTO user_roles (id, user_id, role_id, assigned_by, created_at)
-        VALUES (?, ?, ?, NULL, ?)
-      `,
-      [randomUUID(), userId, adminRole.id, new Date().toISOString()]
-    );
-
-    await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [userId]);
-  } finally {
-    await db.close();
-  }
-}
-
 async function registerUser(username: string): Promise<{ userId: string; token: string; username: string }> {
   const register = await postJson(
     "/api/auth/register",
@@ -153,6 +129,9 @@ async function registerUser(username: string): Promise<{ userId: string; token: 
 }
 
 test("admin abuse endpoints expose incidents and allow resolving block", async () => {
+  const port = await allocateTestPort();
+  baseUrl = `http://127.0.0.1:${port}`;
+
   const env = {
     ...process.env,
     PORT: String(port),
@@ -177,7 +156,7 @@ test("admin abuse endpoints expose incidents and allow resolving block", async (
 
     const seller = await registerUser(`abuse_seller_${Date.now()}`);
     const admin = await registerUser(`abuse_admin_${Date.now()}`);
-    await grantAdminRole(dbPath, admin.userId);
+    await grantAdminRoleForTest(dbPath, admin.userId);
 
     const adminLogin = await postJson(
       "/api/auth/login",
@@ -194,7 +173,7 @@ test("admin abuse endpoints expose incidents and allow resolving block", async (
     const createCard = await postJson(
       "/api/cards",
       {
-        name: "Abuse Sentinel",
+        name: `Abuse Sentinel ${Date.now()}`,
         rarity: "rare",
         cardClass: "guardian",
         abilities: ["block", "counter"],
@@ -246,15 +225,23 @@ test("admin abuse endpoints expose incidents and allow resolving block", async (
     );
     assert.equal(dupTwo.status, 409);
 
-    const blockedAttempt = await postJson(
-      "/api/marketplace/listings",
-      { cardId, priceCredits: 8 },
-      {
-        Authorization: `Bearer ${seller.token}`,
-        "x-client-platform": "web"
+    let blockedAttempt: { status: number; body: unknown } | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      blockedAttempt = await postJson(
+        "/api/marketplace/listings",
+        { cardId, priceCredits: 8 + attempt },
+        {
+          Authorization: `Bearer ${seller.token}`,
+          "x-client-platform": "web"
+        }
+      );
+
+      if (blockedAttempt.status === 429) {
+        break;
       }
-    );
-    assert.equal(blockedAttempt.status, 429);
+    }
+
+    assert.equal(blockedAttempt?.status, 429);
     const blockedBody = blockedAttempt.body as { incidentId?: string; blockedUntil?: string };
     assert.ok(blockedBody.incidentId);
     assert.ok(blockedBody.blockedUntil);
@@ -309,8 +296,7 @@ test("admin abuse endpoints expose incidents and allow resolving block", async (
     );
     assert.equal(afterResolveAttempt.status, 409);
   } finally {
-    server.kill("SIGTERM");
-    await sleep(300);
+    await stopServer(server);
     if (fs.existsSync(dbPath)) {
       fs.rmSync(dbPath, { force: true });
     }

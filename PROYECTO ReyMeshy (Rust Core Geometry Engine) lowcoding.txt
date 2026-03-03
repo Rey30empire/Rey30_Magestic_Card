@@ -1,0 +1,506 @@
+PROYECTO: ReyMeshy (Rust Core Geometry Engine)
+
+Objetivo:
+
+Crear un framework geométrico seguro, determinista y validado que:
+
+Use Half-Edge Data Structure
+
+Garantice invariantes topológicos
+
+Evite mallas rotas
+
+Evite caras invertidas
+
+Evite non-manifold
+
+Tenga tests obligatorios
+
+Sea backend para tu AI
+
+📁 ESTRUCTURA DEL PROYECTO
+reymeshy/
+│
+├── Cargo.toml
+│
+├── src/
+│   ├── lib.rs
+│   │
+│   ├── math/
+│   │   ├── mod.rs
+│   │   ├── vec3.rs
+│   │   └── mat4.rs
+│   │
+│   ├── mesh/
+│   │   ├── mod.rs
+│   │   ├── mesh.rs
+│   │   ├── half_edge.rs
+│   │   ├── topology_validator.rs
+│   │   └── mesh_io.rs
+│   │
+│   ├── ops/
+│   │   ├── mod.rs
+│   │   ├── normals.rs
+│   │   ├── smoothing.rs
+│   │   ├── edge_flip.rs
+│   │   ├── edge_split.rs
+│   │   ├── edge_collapse.rs
+│   │   └── decimation.rs
+│   │
+│   └── errors.rs
+│
+└── tests/
+    ├── topology_tests.rs
+    ├── ops_tests.rs
+    └── fuzz_tests.rs
+🔥 LOWCODING MAESTRO PARA CODEX (RUST VERSION)
+
+Copia esto en Codex.
+
+🎯 ROL
+
+Eres Principal Engine Architect desarrollando ReyMeshy en Rust.
+
+Debe ser memory-safe, sin unsafe innecesario.
+
+No se permite código inseguro salvo justificación crítica.
+
+🧱 DATA STRUCTURE
+
+Implementar Half-Edge usando índices, no punteros.
+
+Estructuras:
+
+pub struct VertexId(pub usize);
+pub struct HalfEdgeId(pub usize);
+pub struct FaceId(pub usize);
+pub struct Vertex {
+    pub position: Vec3,
+    pub half_edge: Option<HalfEdgeId>,
+}
+pub struct HalfEdge {
+    pub vertex: VertexId,
+    pub twin: HalfEdgeId,
+    pub next: HalfEdgeId,
+    pub prev: HalfEdgeId,
+    pub face: FaceId,
+}
+pub struct Face {
+    pub half_edge: HalfEdgeId,
+}
+pub struct HalfEdgeMesh {
+    pub vertices: Vec<Vertex>,
+    pub half_edges: Vec<HalfEdge>,
+    pub faces: Vec<Face>,
+}
+
+No usar referencias mutables circulares.
+Todo acceso vía índices.
+
+🚨 INVARIANTES OBLIGATORIOS
+
+Implementar:
+
+pub fn validate_topology(&self) -> Result<(), MeshError>
+
+Debe verificar:
+
+twin.twin == self
+
+next.prev == self
+
+prev.next == self
+
+Cada face tiene ciclo cerrado
+
+Cada face tiene >= 3 edges
+
+No existen half-edges duplicados
+
+No existen vertices huérfanos
+
+No hay non-manifold
+
+No hay caras con área ~0
+
+No hay normales NaN
+
+Si falla → devolver MeshError específico.
+
+❌ ERRORES DEFINIDOS
+pub enum MeshError {
+    InvalidTwin,
+    BrokenFaceLoop,
+    NonManifoldEdge,
+    ZeroAreaFace,
+    DanglingVertex,
+    DegenerateEdge,
+    InvalidIndex,
+}
+
+Nunca usar String genérico.
+
+🧮 VEC3
+
+Debe implementar:
+
+Add
+
+Sub
+
+Mul<f32>
+
+Dot
+
+Cross
+
+Normalize
+
+Length
+
+Distance
+
+Si length == 0 en normalize → error.
+
+🔧 OPERACIONES
+
+Todas deben:
+
+Validar pre-condiciones
+
+Ejecutar
+
+Validar post-condiciones
+
+Si post falla → revertir cambios.
+
+EDGE FLIP
+
+Requisitos:
+
+No permitir flip en boundary
+
+No permitir si genera non-manifold
+
+No permitir si invierte normales
+
+EDGE SPLIT
+
+Requisitos:
+
+Insertar nuevo vertex en midpoint
+
+Reconfigurar 4 half-edges mínimo
+
+Mantener twin consistencia
+
+EDGE COLLAPSE
+
+Requisitos:
+
+No permitir si genera cara degenerada
+
+No permitir si reduce malla a < 1 face
+
+No permitir si crea non-manifold
+
+🧠 GEOMETRY OPS
+compute_face_normals()
+
+Cross product correcto.
+
+compute_vertex_normals()
+
+Promedio ponderado por área.
+
+laplacian_smooth(iterations, lambda)
+
+No mover boundary si lock_boundary == true.
+
+🧪 TESTS OBLIGATORIOS
+
+En tests:
+
+Crear triángulo mínimo
+
+Crear quad dividido
+
+Intentar flip ilegal → error esperado
+
+Intentar collapse ilegal → error esperado
+
+Ejecutar validate después de cada op
+
+Fuzz test:
+
+Generar malla pequeña random
+
+Ejecutar secuencia random de ops
+
+validate nunca debe fallar
+
+🔒 COSAS PROHIBIDAS
+
+Nunca:
+
+Usar unsafe sin razón documentada
+
+Ignorar Result
+
+Dejar mesh en estado inconsistente
+
+Silenciar errores
+
+Devolver Ok si hay degeneración
+
+🧠 API PÚBLICA
+
+En lib.rs:
+
+pub fn load_obj(path: &str) -> Result<HalfEdgeMesh, MeshError>;
+
+pub fn save_obj(mesh: &HalfEdgeMesh, path: &str) -> Result<(), MeshError>;
+
+Operaciones encadenables:
+
+impl HalfEdgeMesh {
+    pub fn smooth(&mut self, iterations: u32, lambda: f32) -> Result<(), MeshError>;
+    pub fn decimate(&mut self, target_tris: usize) -> Result<(), MeshError>;
+}
+🔥 FEATURE FLAGS
+
+En Cargo.toml:
+
+debug_checks
+
+parallel (rayon futuro)
+
+gpu (futuro)
+
+🚀 FUTURO
+
+No implementar aún:
+
+QEM decimation
+
+Voxel remesh
+
+BVH
+
+KD-Tree
+
+GPU compute
+
+FIN DEL LOWCODING
+🧠 Ahora lo estratégico
+
+Rust te da:
+
+✔ Memory safety
+✔ Performance
+✔ Concurrencia segura
+✔ Ideal para backend AI engine
+✔ Base para GPU compute en futuro
+
+Y cuando quieras:
+
+Expones bindings Python con pyo3
+
+Lo conectas a tu AI
+
+Lo conviertes en microservicio
+
+Convertir ReyMeshy en:
+
+🔥 Motor geométrico + Servicio AI-compatible
+
+Tu AI no tocará estructuras internas.
+Solo enviará comandos estructurados y recibirá resultados validados.
+
+🏗️ ARQUITECTURA GLOBAL
+AI App
+   ↓
+Command Layer (JSON-RPC)
+   ↓
+ReyMeshy Service
+   ↓
+HalfEdge Engine (Rust Core)
+🧩 NUEVA CAPA: reymeshy_service
+
+Estructura:
+
+reymeshy_service/
+│
+├── src/
+│   ├── main.rs
+│   ├── rpc.rs
+│   ├── command_router.rs
+│   ├── mesh_registry.rs
+│   └── dto.rs
+📦 1️⃣ REGISTRO DE MALLAS
+
+Tu engine debe mantener un registro interno:
+
+pub struct MeshRegistry {
+    meshes: HashMap<String, HalfEdgeMesh>,
+}
+
+Cada malla tiene un ID único:
+
+"mesh_001"
+
+"character_body_v1"
+
+etc.
+
+Tu AI nunca accede directo a la malla.
+Solo por ID.
+
+📡 2️⃣ FORMATO DE COMANDO PARA AI
+
+Entrada desde AI:
+
+{
+  "command": "smooth",
+  "mesh_id": "mesh_001",
+  "params": {
+    "iterations": 3,
+    "lambda": 0.25
+  }
+}
+
+Respuesta:
+
+{
+  "status": "ok",
+  "tris_before": 120000,
+  "tris_after": 120000,
+  "warnings": []
+}
+
+Si falla:
+
+{
+  "status": "error",
+  "code": "NonManifoldEdge",
+  "message": "Edge collapse would create non-manifold geometry"
+}
+🔥 LOWCODING PARA CODEX – SERVICE LAYER
+
+Copia esto:
+
+🎯 ROL
+
+Crear un servicio JSON-RPC para ReyMeshy.
+
+Debe:
+
+Ser asíncrono (tokio)
+
+No bloquear thread principal
+
+Validar todos los comandos
+
+Nunca permitir corrupción de malla
+
+Serializar errores correctamente
+
+🧱 DEPENDENCIAS
+
+En Cargo.toml:
+
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+warp = "0.3"
+uuid = "1"
+🧠 COMMAND ROUTER
+
+Debe:
+
+Recibir JSON
+
+Validar estructura
+
+Buscar mesh_id en MeshRegistry
+
+Ejecutar operación
+
+Validar malla post-op
+
+Devolver resultado
+
+Nunca ejecutar comando si mesh_id no existe.
+
+🚨 REGLAS CRÍTICAS
+
+Después de cada comando:
+
+mesh.validate_topology()?;
+
+Si falla:
+
+Revertir cambios
+
+Devolver error
+
+No modificar estado
+
+🔐 TRANSACCIONES
+
+Cada operación debe:
+
+Clonar estado previo
+
+Ejecutar operación
+
+Validar
+
+Si falla → restaurar snapshot
+
+Nunca dejar mesh en estado intermedio.
+
+🧪 TESTS SERVICE
+
+Debe probar:
+
+Comando válido
+
+mesh_id inexistente
+
+Parámetro inválido
+
+Operación ilegal (edge flip boundary)
+
+Concurrencia básica (dos comandos simultáneos)
+
+🚀 EJECUCIÓN
+
+Servidor local:
+
+POST /command
+
+Tu AI puede llamar vía HTTP.
+
+🔥 AHORA LO IMPORTANTE
+
+Con esto tienes:
+
+✔ Engine seguro
+✔ Validación estricta
+✔ Servicio AI-ready
+✔ Arquitectura escalable
+✔ Base para GPU futura
+✔ Base para multi-thread
+
+Esto ya no es hobby.
+Esto es infraestructura.
+
+🧠 Siguiente evolución posible
+
+1️⃣ Sistema de Node Graph procedural
+2️⃣ Motor LOD automático
+3️⃣ Sistema de validación geométrica avanzada
+4️⃣ Capa GPU compute
+5️⃣ ECS (Entity Component System)
+6️⃣ Editor visual tipo Unreal

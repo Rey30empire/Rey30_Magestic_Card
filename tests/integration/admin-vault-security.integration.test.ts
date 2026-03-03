@@ -2,19 +2,21 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createCipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import sqlite3 from "sqlite3";
 import test from "node:test";
+import {
+  getRowForTest,
+  grantAdminRoleForTest,
+  isSqlServerPrimaryForTests,
+  runStatementForTest
+} from "./helpers/test-db";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const port = 4750 + Math.floor(Math.random() * 100);
 const baseUrl = `http://127.0.0.1:${port}`;
 const dbPath = path.join(os.tmpdir(), `rey30-int-vault-security-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
 const vaultSecret = "integration_vault_secret_1234567890";
-
-type DbGet = <T>(sql: string, params?: Array<string | number | null>) => Promise<T | undefined>;
-type DbRun = (sql: string, params?: Array<string | number | null>) => Promise<void>;
 
 function toB64(value: Buffer): string {
   return value.toString("base64url");
@@ -27,64 +29,6 @@ function encryptLegacyV1(secret: string, keySecret: string): string {
   const encrypted = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `v1:${toB64(iv)}:${toB64(tag)}:${toB64(encrypted)}`;
-}
-
-function openDb(filePath: string): { get: DbGet; run: DbRun; close: () => Promise<void> } {
-  const sqlite = sqlite3.verbose();
-  const db = new sqlite.Database(filePath);
-
-  const get: DbGet = <T>(sql: string, params: Array<string | number | null> = []) =>
-    new Promise<T | undefined>((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(row as T | undefined);
-      });
-    });
-
-  const run: DbRun = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  const close = () =>
-    new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  return { get, run, close };
-}
-
-async function grantAdminRole(filePath: string, userId: string): Promise<void> {
-  const db = openDb(filePath);
-  try {
-    const adminRole = await db.get<{ id: string }>("SELECT id FROM roles WHERE key = 'admin'");
-    assert.ok(adminRole?.id);
-    await db.run(
-      `
-        INSERT OR IGNORE INTO user_roles (id, user_id, role_id, assigned_by, created_at)
-        VALUES (?, ?, ?, NULL, ?)
-      `,
-      [randomUUID(), userId, adminRole.id, new Date().toISOString()]
-    );
-    await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [userId]);
-  } finally {
-    await db.close();
-  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -184,6 +128,7 @@ test("admin vault security endpoints rotate legacy v1 entries and audit chain ve
 
   try {
     await waitForHealth();
+    await runStatementForTest(dbPath, "DELETE FROM audit_logs");
 
     const normalUserRegister = await sendJson(
       "POST",
@@ -221,7 +166,7 @@ test("admin vault security endpoints rotate legacy v1 entries and audit chain ve
     assert.equal(adminRegister.status, 201);
     const adminId = (adminRegister.body as { user?: { id?: string } }).user?.id;
     assert.ok(adminId);
-    await grantAdminRole(dbPath, adminId as string);
+    await grantAdminRoleForTest(dbPath, adminId as string);
 
     const adminLogin = await sendJson(
       "POST",
@@ -233,22 +178,20 @@ test("admin vault security endpoints rotate legacy v1 entries and audit chain ve
     const adminToken = (adminLogin.body as { token?: string }).token;
     assert.ok(adminToken);
 
-    const db = openDb(dbPath);
     let keysRef: string | undefined;
-    try {
-      const aiConfig = await db.get<{ keys_ref: string | null }>("SELECT keys_ref FROM user_ai_configs LIMIT 1");
-      keysRef = aiConfig?.keys_ref ?? undefined;
-      assert.ok(keysRef);
+    const aiConfig = await getRowForTest<{ keys_ref: string | null }>(
+      dbPath,
+      isSqlServerPrimaryForTests() ? "SELECT TOP 1 keys_ref FROM user_ai_configs" : "SELECT keys_ref FROM user_ai_configs LIMIT 1"
+    );
+    keysRef = aiConfig?.keys_ref ?? undefined;
+    assert.ok(keysRef);
 
-      const legacyPayload = encryptLegacyV1("sk-integration-abc-123", vaultSecret);
-      await db.run("UPDATE vault_entries SET encrypted_value = ?, updated_at = ? WHERE id = ?", [
-        legacyPayload,
-        new Date().toISOString(),
-        keysRef as string
-      ]);
-    } finally {
-      await db.close();
-    }
+    const legacyPayload = encryptLegacyV1("sk-integration-abc-123", vaultSecret);
+    await runStatementForTest(dbPath, "UPDATE vault_entries SET encrypted_value = ?, updated_at = ? WHERE id = ?", [
+      legacyPayload,
+      new Date().toISOString(),
+      keysRef as string
+    ]);
 
     const statusBefore = await getJson("/api/admin/security/vault/status?limit=5000", {
       Authorization: `Bearer ${adminToken}`,

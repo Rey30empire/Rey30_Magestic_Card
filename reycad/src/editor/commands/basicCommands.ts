@@ -1,6 +1,6 @@
 import { produce } from "immer";
 import { createId } from "../../lib/ids";
-import type { PrimitiveNode, Transform, Node, Project, MaterialDef } from "../../engine/scenegraph/types";
+import type { PrimitiveNode, Transform, Node, Project, MaterialDef, NodeRigidBody, NodeCollider, PhysicsConstraint, PhysicsSettings, TextureAsset } from "../../engine/scenegraph/types";
 import type { Command } from "./types";
 import type { EditorData } from "../state/types";
 
@@ -133,6 +133,38 @@ export function setMaterialCommand(nodeId: string, before: string | undefined, a
       return produce(state, (draft) => {
         const node = draft.project.nodes[nodeId];
         if (node) {
+          node.materialId = before;
+        }
+      });
+    }
+  };
+}
+
+export function setMaterialBatchCommand(nodeIds: string[], after: string | undefined): Command {
+  const beforeByNode = new Map<string, string | undefined>();
+  return {
+    id: createId("cmd"),
+    name: `Set Material Batch (${nodeIds.length})`,
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        beforeByNode.clear();
+        for (const nodeId of nodeIds) {
+          const node = draft.project.nodes[nodeId];
+          if (!node) {
+            continue;
+          }
+          beforeByNode.set(nodeId, node.materialId);
+          node.materialId = after;
+        }
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        for (const [nodeId, before] of beforeByNode.entries()) {
+          const node = draft.project.nodes[nodeId];
+          if (!node) {
+            continue;
+          }
           node.materialId = before;
         }
       });
@@ -275,6 +307,106 @@ export function setGridCommand(
   };
 }
 
+export function setNodeRigidBodyCommand(nodeId: string, before: NodeRigidBody | undefined, after: NodeRigidBody | undefined): Command {
+  return {
+    id: createId("cmd"),
+    name: `Set RigidBody ${nodeId}`,
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        const node = draft.project.nodes[nodeId];
+        if (!node) {
+          return;
+        }
+        if (after) {
+          node.rigidBody = cloneNode(after);
+        } else {
+          delete node.rigidBody;
+        }
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        const node = draft.project.nodes[nodeId];
+        if (!node) {
+          return;
+        }
+        if (before) {
+          node.rigidBody = cloneNode(before);
+        } else {
+          delete node.rigidBody;
+        }
+      });
+    }
+  };
+}
+
+export function setNodeColliderCommand(nodeId: string, before: NodeCollider | undefined, after: NodeCollider | undefined): Command {
+  return {
+    id: createId("cmd"),
+    name: `Set Collider ${nodeId}`,
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        const node = draft.project.nodes[nodeId];
+        if (!node) {
+          return;
+        }
+        if (after) {
+          node.collider = cloneNode(after);
+        } else {
+          delete node.collider;
+        }
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        const node = draft.project.nodes[nodeId];
+        if (!node) {
+          return;
+        }
+        if (before) {
+          node.collider = cloneNode(before);
+        } else {
+          delete node.collider;
+        }
+      });
+    }
+  };
+}
+
+export function setPhysicsSettingsCommand(before: PhysicsSettings, after: PhysicsSettings): Command {
+  return {
+    id: createId("cmd"),
+    name: "Set Physics",
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        draft.project.physics = cloneNode(after);
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        draft.project.physics = cloneNode(before);
+      });
+    }
+  };
+}
+
+export function setPhysicsConstraintsCommand(before: PhysicsConstraint[], after: PhysicsConstraint[]): Command {
+  return {
+    id: createId("cmd"),
+    name: "Set Physics Constraints",
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        draft.project.physics.constraints = cloneNode(after);
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        draft.project.physics.constraints = cloneNode(before);
+      });
+    }
+  };
+}
+
 export function upsertMaterialCommand(
   materialId: string,
   before: MaterialDef | undefined,
@@ -340,6 +472,71 @@ export function removeMaterialCommand(
             node.materialId = materialId;
           }
         }
+      });
+    }
+  };
+}
+
+export function upsertTextureAssetCommand(
+  textureId: string,
+  before: TextureAsset | undefined,
+  after: TextureAsset
+): Command {
+  return {
+    id: createId("cmd"),
+    name: `Upsert Texture ${after.name}`,
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        draft.project.textures[textureId] = cloneNode(after);
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        if (before) {
+          draft.project.textures[textureId] = cloneNode(before);
+          return;
+        }
+        delete draft.project.textures[textureId];
+      });
+    }
+  };
+}
+
+export function removeTextureAssetCommand(textureId: string, before: TextureAsset): Command {
+  return {
+    id: createId("cmd"),
+    name: `Delete Texture ${before.name}`,
+    do(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        delete draft.project.textures[textureId];
+        for (const material of Object.values(draft.project.materials)) {
+          if (material.kind !== "pbr" || !material.pbr) {
+            continue;
+          }
+          if (material.pbr.baseColorMapId === textureId) {
+            material.pbr.baseColorMapId = undefined;
+          }
+          if (material.pbr.normalMapId === textureId) {
+            material.pbr.normalMapId = undefined;
+          }
+          if (material.pbr.aoMapId === textureId) {
+            material.pbr.aoMapId = undefined;
+          }
+          if (material.pbr.roughnessMapId === textureId) {
+            material.pbr.roughnessMapId = undefined;
+          }
+          if (material.pbr.metalnessMapId === textureId) {
+            material.pbr.metalnessMapId = undefined;
+          }
+          if (material.pbr.emissiveMapId === textureId) {
+            material.pbr.emissiveMapId = undefined;
+          }
+        }
+      });
+    },
+    undo(state: EditorData): EditorData {
+      return produce(state, (draft) => {
+        draft.project.textures[textureId] = cloneNode(before);
       });
     }
   };

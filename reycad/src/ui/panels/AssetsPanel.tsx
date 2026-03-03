@@ -1,20 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import engineApi from "../../engine/api/engineApi";
 import { SearchBar } from "../components/SearchBar";
 import { useEditorStore } from "../../editor/state/editorStore";
 import { ColorPicker } from "../components/ColorPicker";
 import { SliderRow } from "../components/SliderRow";
 
-type Tab = "templates" | "materials" | "primitives";
+type Tab = "templates" | "materials" | "textures" | "primitives";
 
-const primitives = ["box", "cylinder", "sphere", "cone", "text"] as const;
+const primitives = ["box", "cylinder", "sphere", "cone", "text", "terrain"] as const;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("file read failed"));
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function AssetsPanel(): JSX.Element {
   const [tab, setTab] = useState<Tab>("templates");
   const [query, setQuery] = useState("");
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  const [selectedTextureId, setSelectedTextureId] = useState<string | null>(null);
   const [materialNameDraft, setMaterialNameDraft] = useState("");
+  const [variantName, setVariantName] = useState("");
+  const [uploadingTexture, setUploadingTexture] = useState(false);
+  const textureInputRef = useRef<HTMLInputElement | null>(null);
   const selection = useEditorStore((state) => state.data.selection);
+  const project = useEditorStore((state) => state.data.project);
 
   const templates = useMemo(
     () =>
@@ -25,8 +39,12 @@ export default function AssetsPanel(): JSX.Element {
   );
 
   const materials = useMemo(
-    () => engineApi.listMaterials().filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase())),
-    [query]
+    () => Object.values(project.materials).filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase())),
+    [project.materials, query]
+  );
+  const textures = useMemo(
+    () => Object.values(project.textures).filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase())),
+    [project.textures, query]
   );
 
   const selectedMaterial = useMemo(
@@ -44,6 +62,30 @@ export default function AssetsPanel(): JSX.Element {
     setMaterialNameDraft(selectedMaterial?.name ?? "");
   }, [selectedMaterial?.id, selectedMaterial?.name]);
 
+  useEffect(() => {
+    if (!selectedTextureId && textures.length > 0) {
+      setSelectedTextureId(textures[0].id);
+    }
+  }, [selectedTextureId, textures]);
+
+  async function onTextureUpload(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setUploadingTexture(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const id = engineApi.createTextureAsset(file.name, dataUrl, file.type || "image/png");
+      if (id) {
+        setSelectedTextureId(id);
+      }
+    } finally {
+      setUploadingTexture(false);
+      event.target.value = "";
+    }
+  }
+
   return (
     <div className="panel stack-sm">
       <div className="panel-head">
@@ -56,6 +98,9 @@ export default function AssetsPanel(): JSX.Element {
         </button>
         <button className={`btn ${tab === "materials" ? "btn-primary" : ""}`} onClick={() => setTab("materials")} type="button">
           Materials
+        </button>
+        <button className={`btn ${tab === "textures" ? "btn-primary" : ""}`} onClick={() => setTab("textures")} type="button">
+          Textures
         </button>
         <button className={`btn ${tab === "primitives" ? "btn-primary" : ""}`} onClick={() => setTab("primitives")} type="button">
           Primitives
@@ -107,9 +152,7 @@ export default function AssetsPanel(): JSX.Element {
                 if (!selectedMaterial) {
                   return;
                 }
-                for (const nodeId of selection) {
-                  engineApi.setNodeMaterial(nodeId, selectedMaterial.id);
-                }
+                engineApi.setNodeMaterialBatch(selection, selectedMaterial.id);
               }}
               type="button"
             >
@@ -222,6 +265,82 @@ export default function AssetsPanel(): JSX.Element {
                 </>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {tab === "textures" && (
+        <div className="stack-sm">
+          <div className="row wrap">
+            <button className="btn btn-primary" disabled={uploadingTexture} onClick={() => textureInputRef.current?.click()} type="button">
+              {uploadingTexture ? "Uploading..." : "Upload Texture"}
+            </button>
+            <button
+              className="btn"
+              disabled={!selectedTextureId || selection.length === 0}
+              onClick={() => {
+                if (!selectedTextureId) {
+                  return;
+                }
+                engineApi.applyTextureToSelection(selectedTextureId);
+              }}
+              type="button"
+            >
+              Apply To Selection
+            </button>
+            <button className="btn" disabled={selection.length === 0} onClick={() => engineApi.recolorSelection("#d7bfa9")} type="button">
+              Recolor Selection
+            </button>
+            <button className="btn" disabled={selection.length === 0} onClick={() => engineApi.applyPatternToSelection("camo")} type="button">
+              Apply Camo Pattern
+            </button>
+            <button
+              className="btn"
+              disabled={selection.length === 0}
+              onClick={() => {
+                void engineApi.saveSelectionVariant(variantName);
+                setVariantName("");
+              }}
+              type="button"
+            >
+              Save Variant
+            </button>
+          </div>
+
+          <label className="field">
+            <span>Variant Name</span>
+            <input
+              className="input"
+              placeholder="Humanoid skin v1"
+              value={variantName}
+              onChange={(event) => setVariantName(event.target.value)}
+            />
+          </label>
+
+          <input ref={textureInputRef} accept="image/*" style={{ display: "none" }} type="file" onChange={(event) => void onTextureUpload(event)} />
+
+          <ul className="list">
+            {textures.map((texture) => (
+              <li key={texture.id}>
+                <button
+                  className={`list-item ${selectedTextureId === texture.id ? "selected" : ""}`}
+                  onClick={() => setSelectedTextureId(texture.id)}
+                  type="button"
+                >
+                  <span>{texture.name}</span>
+                  <span className="mono">{texture.mimeType}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {selectedTextureId && project.textures[selectedTextureId] && (
+            <img
+              alt={project.textures[selectedTextureId].name}
+              className="preview-image"
+              src={project.textures[selectedTextureId].dataUrl}
+              style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "10px" }}
+            />
           )}
         </div>
       )}

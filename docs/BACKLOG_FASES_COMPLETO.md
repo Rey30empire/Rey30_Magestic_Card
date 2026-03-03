@@ -108,17 +108,20 @@ Objetivo: integrar frontend Unity con todos los flujos ACS.
 Avance inicial:
 - Endpoint base UI `GET /api/me/acs-home` para resolver módulos por rol/permiso/plataforma y counts operativos.
 - Consola web `/console` con bloque ACS Home y envío dinámico de `x-client-platform`.
-- Consola web `/console` con `ACS Workspace` modular (Agent Editor, Connection, Rules, Skills, Tools, Memory, Sandbox, Marketplace) conectado a APIs reales.
+- Consola web `/console` con `ACS Workspace` modular (Agent Editor, Connection, Rules, Skills, Tools, Memory, Training, Sandbox, Marketplace) conectado a APIs reales.
 - Hardening Fase 7 aplicado en backend/editor:
   - validación y bloqueo de endpoints LLM inseguros.
   - timeout/retry controlado para llamadas LLM.
   - mejoras de estabilidad en evaluación scenegraph y fallback CSG.
 
 Pendientes:
-- Pantallas `ACS Home`, `Agent Editor`, `Connection`, `Rules Console`, `Skills Catalog`, `Tools`, `Memory`, `Training`, `Sandbox`, `Marketplace`.
+- Integración de pantallas equivalentes en cliente Unity (`ACS Home`, `Agent Editor`, `Connection`, `Rules Console`, `Skills Catalog`, `Tools`, `Memory`, `Training`, `Sandbox`, `Marketplace`), ya operativas en la consola web.
 - Manejo UX de errores de rol/permiso/plataforma.
 - Envío consistente de `x-client-platform`.
 - Flujos admin/creator completos dentro de cliente.
+
+Avance adicional:
+- Consola web agrega módulo admin `Training Ops` con lectura de `queue-metrics`, listado `DLQ` y acciones de `requeue` individual/batch (sin romper contratos backend existentes).
 
 ## Fase 8 - Alcance juego/experiencia (Pendiente)
 Objetivo: cerrar visión completa del lowcoding original.

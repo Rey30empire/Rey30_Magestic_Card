@@ -100,6 +100,57 @@ function summarizeToolCall(toolCall: AiToolCall): string {
   if (toolCall.tool === "export_glb") {
     return "export_glb";
   }
+  if (toolCall.tool === "set_rigidbody") {
+    return `set_rigidbody(${toolCall.args.nodeId})`;
+  }
+  if (toolCall.tool === "set_collider") {
+    return `set_collider(${toolCall.args.nodeId})`;
+  }
+  if (toolCall.tool === "set_physics_world") {
+    return "set_physics_world";
+  }
+  if (toolCall.tool === "add_constraint") {
+    return `add_constraint(${toolCall.args.aId},${toolCall.args.bId})`;
+  }
+  if (toolCall.tool === "update_constraint") {
+    return `update_constraint(${toolCall.args.constraintId})`;
+  }
+  if (toolCall.tool === "remove_constraint") {
+    return `remove_constraint(${toolCall.args.constraintId})`;
+  }
+  if (toolCall.tool === "list_constraints") {
+    return "list_constraints";
+  }
+  if (toolCall.tool === "raycast_physics") {
+    return "raycast_physics";
+  }
+  if (toolCall.tool === "get_physics_events") {
+    return "get_physics_events";
+  }
+  if (toolCall.tool === "clear_physics_events") {
+    return "clear_physics_events";
+  }
+  if (toolCall.tool === "setup_battle_scene") {
+    return "setup_battle_scene";
+  }
+  if (toolCall.tool === "play_battle_clash") {
+    return `play_battle_clash(${toolCall.args.impulse ?? 16})`;
+  }
+  if (toolCall.tool === "stop_battle_scene") {
+    return "stop_battle_scene";
+  }
+  if (toolCall.tool === "apply_impulse") {
+    return `apply_impulse(${toolCall.args.nodeId})`;
+  }
+  if (toolCall.tool === "set_quality") {
+    return `set_quality(${toolCall.args.mode})`;
+  }
+  if (toolCall.tool === "get_engine_status") {
+    return "get_engine_status";
+  }
+  if (toolCall.tool === "generate_terrain") {
+    return "generate_terrain";
+  }
   return toolCall.tool;
 }
 
@@ -120,7 +171,8 @@ function permissionsPreset(kind: "safe" | "modeling" | "agents" | "full"): AiPer
       materials: true,
       booleans: true,
       templates: true,
-      grid: true
+      grid: true,
+      engineControl: true
     };
   }
   if (kind === "agents") {
@@ -130,7 +182,8 @@ function permissionsPreset(kind: "safe" | "modeling" | "agents" | "full"): AiPer
       cards: true,
       agents: true,
       skills: true,
-      grid: true
+      grid: true,
+      engineControl: true
     };
   }
   return {
@@ -146,7 +199,8 @@ function permissionsPreset(kind: "safe" | "modeling" | "agents" | "full"): AiPer
     agents: true,
     skills: true,
     grid: true,
-    export: true
+    export: true,
+    engineControl: true
   };
 }
 

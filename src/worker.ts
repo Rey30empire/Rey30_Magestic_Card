@@ -1,10 +1,10 @@
 import { env } from "./config/env";
-import { initPostgresMirror } from "./db/postgres";
+import { closePostgresMirror, initPostgresMirror } from "./db/postgres";
+import { closeSqlServerConnection } from "./db/sqlserver";
 import { initDb } from "./db/sqlite";
 import { startTrainingQueueConsumer, stopTrainingQueue, isRedisTrainingQueueEnabled } from "./services/training-queue";
 import {
-  enqueueTrainingJobFromQueue,
-  startTrainingJobRunner,
+  processTrainingJobQueueAttempt,
   startTrainingJobWorkerPolling,
   stopTrainingJobWorkerPolling
 } from "./services/training-jobs";
@@ -18,7 +18,7 @@ async function shutdown(code = 0): Promise<void> {
 
   shuttingDown = true;
   stopTrainingJobWorkerPolling();
-  await stopTrainingQueue();
+  await Promise.allSettled([stopTrainingQueue(), closeSqlServerConnection(), closePostgresMirror()]);
   process.exit(code);
 }
 
@@ -27,9 +27,8 @@ async function bootstrapWorker(): Promise<void> {
   await initPostgresMirror();
 
   if (isRedisTrainingQueueEnabled()) {
-    await startTrainingJobRunner();
-    await startTrainingQueueConsumer(async (jobId) => {
-      await enqueueTrainingJobFromQueue(jobId);
+    await startTrainingQueueConsumer(async (context) => {
+      await processTrainingJobQueueAttempt(context);
     });
   } else {
     await startTrainingJobWorkerPolling({
@@ -52,5 +51,5 @@ async function bootstrapWorker(): Promise<void> {
 
 bootstrapWorker().catch((error) => {
   console.error("[training-worker] failed to start", error);
-  process.exit(1);
+  void Promise.allSettled([closeSqlServerConnection(), closePostgresMirror()]).finally(() => process.exit(1));
 });

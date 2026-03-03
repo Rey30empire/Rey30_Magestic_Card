@@ -1,0 +1,502 @@
+0) Objetivo
+
+Implementar en la app un sistema tipo Unity Package Manager + Blender Asset Browser + Roblox Toolbox, pero propio:
+
+Global Asset Vault (biblioteca nativa) compartida por todos los proyectos
+
+Project Asset Links (el proyecto solo referencia, no duplica)
+
+Import pipeline (drag&drop, open folder, zip packs)
+
+Web ingest (pegar URL → descargar/importar si es desktop o si backend lo permite)
+
+Asset types:
+
+Models (glb/gltf/obj/fbx si aplica)
+
+Materials (presets + texturas)
+
+Rigs (skeleton)
+
+Animations (clips)
+
+Prefabs (combinaciones)
+
+Terrain packs (heightmaps + splats + scatter sets)
+
+Scenes (maps/islands/houses)
+
+Performance: dedupe, hash, lazy load, thumbnails async, LOD/decimate.
+
+1) Conceptos (muy importantes)
+1.1 Vault vs Project
+
+Vault (Global): almacén único de assets, “nativo”, reutilizable en todos los proyectos.
+
+Project: solo guarda un manifest con referencias (assetId) y overrides (transform, materiales, skins).
+
+1.2 Asset = paquete con metadata + archivos
+
+Cada asset en el Vault tiene:
+
+asset.json (metadata)
+
+files/ (model, textures, anims, thumbnails)
+
+variants/ (LODs, versiones optimizadas)
+
+preview/ (thumbs, poster)
+
+2) Estructura de carpetas (desktop y web)
+Desktop (Tauri/Electron)
+
+Ubicación sugerida:
+
+Windows: %APPDATA%/ReyCAD/vault/
+
+macOS: ~/Library/Application Support/ReyCAD/vault/
+
+Linux: ~/.local/share/ReyCAD/vault/
+
+Estructura:
+
+vault/
+
+index.json
+
+assets/
+
+<assetId>/
+
+asset.json
+
+files/
+
+preview/
+
+variants/
+
+Web (fallback)
+
+Vault en IndexedDB (blobs) con la misma estructura lógica
+
+o Vault en servidor (si usuario está logueado):
+
+GET /api/vault/assets
+
+POST /api/vault/upload
+
+GET /api/vault/asset/:id/download
+
+3) Data model del Vault
+3.1 AssetRecord
+
+Campos:
+
+id (uuid)
+
+type = model|material|rig|anim|prefab|terrain|scene|pack
+
+name, description
+
+tags[]
+
+author, license (opcional)
+
+createdAt, updatedAt
+
+source = local|import|web|marketplace
+
+files[] = lista de archivos con path, role (albedo/normal/model/anim/etc), hash, size
+
+dependencies[] (ej: un prefab depende de modelos + materiales + anims)
+
+stats (polycount, texturesCount, rigBones, animClips)
+
+variants (lod0/lod1/ktx2/draco)
+
+thumbnailPath
+
+3.2 VaultIndex
+
+index.json:
+
+lista de AssetRecord (resumen)
+
+mapa hash -> assetId para dedupe
+
+categorías y tags indexados
+
+4) Dedupe “no gastar” (clave)
+
+Implementar hashing por archivo:
+
+SHA-256 o xxhash64 (rápido)
+
+si llega un archivo con hash ya existente:
+
+no duplicar: crea referencia o hardlink/symlink (desktop)
+
+en web: usar el mismo blob id
+
+Además:
+
+Cuando importas un pack, si ya existe, crear nuevo asset version o saltar.
+
+5) UI: Biblioteca global + Project assets
+5.1 Panel “Library”
+
+Search + filtros por tipo/tags
+
+Grid con thumbnails
+
+Botones por asset:
+
+Add to Project
+
+Open/Preview
+
+Optimize
+
+Duplicate as Base
+
+Export
+
+Delete
+
+5.2 Panel “Project Assets”
+
+Lista de assets usados en el proyecto (refs)
+
+Botón “Reveal in Library”
+
+Indicador de overrides (materiales cambiados, skins, escala)
+
+6) Import Pipeline (cómo entra el contenido)
+6.1 Import métodos
+
+Drag & Drop archivos al Asset Browser
+
+OpenFolder (scan)
+
+Import Pack (.zip / .reyPack)
+
+Paste URL (web ingest)
+
+Marketplace (descargar a Vault)
+
+6.2 Detectar tipo automáticamente
+
+Heurística:
+
+si contiene .glb/.gltf/.obj/.fbx -> asset type model
+
+si contiene skeleton/armature -> type rig o modelWithRig
+
+si contiene clips -> anim
+
+si contiene heightmap + splat + scatter.json -> terrainPack
+
+si contiene scene.json -> scene
+
+si contiene prefab.json -> prefab
+
+si contiene materials.json -> materialPack
+
+6.3 Post-procesamiento automático (ingest jobs)
+
+Después de importar:
+
+generar thumbnail (render preview)
+
+extraer stats (polycount, mats, textures)
+
+generar variantes:
+
+draco/meshopt (si aplica)
+
+textures -> mipmaps / KTX2 (desktop)
+
+LODs (optional)
+
+validar rig y anim:
+
+detectar skeleton
+
+listar clips
+
+Todo esto en worker queue.
+
+7) Rig/Animation “solos” y reutilizables
+7.1 Separar “Rig” y “Animations” como assets independientes
+
+RigAsset: skeleton + metadata (bones, rest pose)
+
+AnimAsset: clips + retarget rules (si se puede)
+
+7.2 Retargeting (MVP)
+
+MVP simple:
+
+si skeleton name/bones match -> compatible
+
+si no match, permitir “mapping” manual (panel):
+
+hips, spine, head, leftArm, rightArm, leftLeg, rightLeg
+
+Guardar mapping como retargetProfile.
+
+8) Terrain / Map / Island packs (tu sueño de mundos)
+8.1 TerrainPack Asset
+
+Incluye:
+
+heightmap (png/exr)
+
+splat layers (4–8): grass/rock/sand/snow…
+
+scatter presets (trees/rocks props)
+
+environment preset (sky/hdr + fog)
+
+optional: navmesh seed
+
+8.2 “Add Terrain Pack to Project”
+
+Al agregar:
+
+crea terrain node
+
+aplica layers + scatter instancing
+
+assets referenciados (no duplicados)
+
+9) “Base Asset” (tu concepto)
+
+Cuando tú subes un modelo y dices “esto es Base”:
+
+creas BaseAsset flag en metadata
+
+se muestra como “Starter”
+
+botón: Start Project from Base
+
+crea proyecto nuevo
+
+inserta el asset base + scene default + materiales default
+
+configura folder structure del proyecto
+
+10) Descargar de la web (sin romper seguridad)
+10.1 Desktop
+
+Permitir “Import from URL”:
+
+descargar solo tipos permitidos:
+
+.glb, .gltf, .zip, .png, .jpg, .hdr
+
+guardar en carpeta temp
+
+pasar por virus-scan opcional (si tienes)
+
+luego ingest pipeline normal
+
+10.2 Web (browser)
+
+Limitación: CORS / seguridad
+Opciones:
+
+(A) Usar backend “download proxy”:
+
+POST /api/vault/import-url {url}
+
+backend descarga, valida, almacena y registra asset
+
+(B) Usuario descarga en su PC y sube el archivo (fallback)
+
+Implementar ambas rutas:
+
+si no hay backend, mostrar “download not possible in web mode”.
+
+11) Project linking (no duplicar)
+
+Cuando el usuario “Add to Project”:
+
+Proyecto guarda:
+
+project.assets[] = {assetId, overrides}
+
+Overrides permitidos:
+
+transform
+
+material overrides
+
+skin layers
+
+visibility/layer
+
+animation clip selection
+
+Nunca copiar archivos al proyecto por defecto.
+Solo copiar si el usuario elige:
+
+“Embed in Project” (modo portátil)
+
+12) Export / Share
+
+Implementar:
+
+Export asset as .reyPack.zip
+
+incluye asset.json + files + dependencies (opcional)
+
+Export project:
+
+project.reycad.json
+
+refs a vault (o embed)
+
+“Publish to marketplace” (futuro):
+
+subir pack y metadata
+
+13) Job Queue (para que no se congele)
+
+Implementar VaultJobQueue:
+
+THUMBNAIL_RENDER
+
+ANALYZE_MODEL
+
+GENERATE_LOD
+
+COMPRESS_TEXTURES
+
+MESH_OPTIMIZE
+
+VALIDATE_RIG_ANIM
+
+Requisitos:
+
+jobs en background
+
+progreso por asset
+
+cancelable
+
+reintentos
+
+14) Seguridad / límites
+
+Limitar tamaño por import
+
+Bloquear extensiones peligrosas
+
+Sanitizar nombres
+
+Nunca ejecutar scripts dentro de packs
+
+Validar MIME
+
+15) Fases de implementación (rápido y sólido)
+Fase 1 (MVP útil)
+
+Vault folder + index.json
+
+Import drag&drop
+
+Library UI + Add to Project (refs)
+
+Thumbnails simples
+
+Fase 2 (Pro)
+
+OpenFolder scan
+
+Dedupe por hash
+
+Optimize variants (draco/meshopt)
+
+Export .reyPack.zip
+
+Fase 3 (Rigs/Animations/Terrain)
+
+Rig asset
+
+Anim asset
+
+Retarget MVP
+
+TerrainPack + Add to project
+
+Fase 4 (Web ingest + marketplace)
+
+Import by URL (desktop)
+
+Backend proxy (web)
+
+Publicación/descarga
+
+16) Entregables (archivos/módulos que Codex debe crear)
+
+src/vault/:
+
+VaultManager.ts (CRUD del vault)
+
+VaultIndex.ts (index, search, dedupe)
+
+VaultIngest.ts (import pipeline)
+
+VaultJobQueue.ts (workers)
+
+VaultExport.ts (pack/export)
+
+src/ui/LibraryPanel.tsx
+
+src/ui/ProjectAssetsPanel.tsx
+
+src/ui/ImportFromUrlModal.tsx
+
+src/workers/meshWorker.ts
+
+src/workers/thumbnailWorker.ts
+
+Backend (si aplica):
+
+POST /api/vault/import-url
+
+POST /api/vault/upload
+
+GET /api/vault/assets
+
+GET /api/vault/asset/:id
+
+17) Reglas finales para Codex
+
+No duplicar assets en proyectos por defecto: solo referencias.
+
+Todos los imports generan thumbnails y metadata.
+
+Todo procesamiento pesado va a workers.
+
+UI simple: Library global + Project Assets.
+
+Debe funcionar offline (desktop) y con fallback en web.
+Aquí van extras diferentes que le dan magia:
+
+“Collections” (carpetas inteligentes)
+Ej: “Armas sci-fi”, “Islas tropicales”, “Rigs humanoides”.
+
+“Smart Search” por contenido
+Buscar “metal”, “wood”, “pistol”, “lowpoly”, “anime” por tags + stats.
+
+Auto-fix import
+Si el modelo viene con texturas faltantes, la app intenta encontrarlas por nombre en el vault.
+
+Preview Studio
+Un mini-escenario fijo para ver materiales/animaciones con HDR y luces bonitas.
+
+One-click “Make Base”
+Cualquier asset puede convertirse en starter template.

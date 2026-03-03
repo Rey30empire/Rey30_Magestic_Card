@@ -10,7 +10,8 @@ export type AiPermissionKey =
   | "agents"
   | "skills"
   | "grid"
-  | "export";
+  | "export"
+  | "engineControl";
 
 export type AiPermissions = Record<AiPermissionKey, boolean>;
 
@@ -215,9 +216,147 @@ export type AiToolCall =
       };
     }
   | {
+      tool: "set_rigidbody";
+      args: {
+        nodeId: string;
+        enabled?: boolean;
+        mode?: "dynamic" | "kinematic" | "fixed";
+        mass?: number;
+        gravityScale?: number;
+        lockRotation?: boolean;
+        linearVelocity?: [number, number, number];
+      };
+    }
+  | {
+      tool: "set_collider";
+      args: {
+        nodeId: string;
+        enabled?: boolean;
+        shape?: "box" | "sphere" | "capsule" | "mesh";
+        isTrigger?: boolean;
+        size?: [number, number, number];
+        radius?: number;
+        height?: number;
+      };
+    }
+  | {
+      tool: "set_physics_world";
+      args: {
+        enabled?: boolean;
+        simulate?: boolean;
+        runtimeMode?: "static" | "arena";
+        backend?: "auto" | "lite" | "rapier";
+        gravity?: [number, number, number];
+        floorY?: number;
+      };
+    }
+  | {
+      tool: "add_constraint";
+      args: {
+        type?: "distance";
+        aId: string;
+        bId: string;
+        restLength?: number;
+        stiffness?: number;
+        damping?: number;
+        enabled?: boolean;
+      };
+    }
+  | {
+      tool: "update_constraint";
+      args: {
+        constraintId: string;
+        patch: {
+          aId?: string;
+          bId?: string;
+          restLength?: number;
+          stiffness?: number;
+          damping?: number;
+          enabled?: boolean;
+        };
+      };
+    }
+  | {
+      tool: "remove_constraint";
+      args: {
+        constraintId: string;
+      };
+    }
+  | {
+      tool: "list_constraints";
+      args: {};
+    }
+  | {
+      tool: "raycast_physics";
+      args: {
+        origin: [number, number, number];
+        direction: [number, number, number];
+        maxDistance?: number;
+      };
+    }
+  | {
+      tool: "get_physics_events";
+      args: {
+        limit?: number;
+      };
+    }
+  | {
+      tool: "clear_physics_events";
+      args: {};
+    }
+  | {
+      tool: "setup_battle_scene";
+      args: {};
+    }
+  | {
+      tool: "play_battle_clash";
+      args: {
+        impulse?: number;
+      };
+    }
+  | {
+      tool: "stop_battle_scene";
+      args: {};
+    }
+  | {
+      tool: "apply_impulse";
+      args: {
+        nodeId: string;
+        impulse: [number, number, number];
+      };
+    }
+  | {
+      tool: "set_quality";
+      args: {
+        mode: "auto" | "ultra" | "high" | "medium" | "low";
+      };
+    }
+  | {
+      tool: "get_engine_status";
+      args: {};
+    }
+  | {
+      tool: "generate_terrain";
+      args: {
+        params?: {
+          w?: number;
+          d?: number;
+          segments?: number;
+          heightSeed?: number;
+          heightScale?: number;
+        };
+        transform?: {
+          position?: [number, number, number];
+          rotation?: [number, number, number];
+          scale?: [number, number, number];
+        };
+        materialId?: string;
+      };
+    }
+  | {
       tool: "create_primitive";
       args: {
-        primitive: "box" | "cylinder" | "sphere" | "cone" | "text";
+        primitive: "box" | "cylinder" | "sphere" | "cone" | "text" | "terrain";
         params?: Record<string, unknown>;
         transform?: {
           position?: [number, number, number];

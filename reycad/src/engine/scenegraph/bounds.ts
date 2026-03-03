@@ -13,6 +13,8 @@ function primitiveSize(item: RenderPrimitive): Vector3 {
       return new Vector3(item.params.r * 2, item.params.h, item.params.r * 2);
     case "text":
       return new Vector3(item.params.text.length * item.params.size * 0.7, item.params.size, item.params.height);
+    case "terrain":
+      return new Vector3(item.params.w, Math.max(2, item.params.heightScale * 2), item.params.d);
     default:
       return new Vector3(10, 10, 10);
   }

@@ -538,6 +538,171 @@
                   <pre id="ai-config-test-output" class="mono ai-test-output">No test executed.</pre>
                 </article>
 
+                <form id="reymeshy-form" class="app-form-block auth-gated">
+                  <h3>ReyMeshy Cleanup</h3>
+                  <label class="check-item">
+                    <input id="reymeshy-enabled" type="checkbox" />
+                    <span>Activar ReyMeshy en esta app</span>
+                  </label>
+                  <p id="reymeshy-status" class="mono">Estado: cargando...</p>
+                  <button id="reymeshy-test-btn" class="ui-btn ui-btn-secondary" type="button">Probar Cleanup</button>
+                  <pre id="reymeshy-output" class="mono ai-test-output">Sin ejecucion.</pre>
+                </form>
+
+                <form id="hybrid-broker-form" class="app-form-block auth-gated">
+                  <h3>Hybrid Inference Broker</h3>
+                  <p class="mono">Controla local (RTX) vs APIs cloud sin detener el engine.</p>
+                  <label class="check-item">
+                    <input id="hybrid-local-enabled" type="checkbox" />
+                    <span>Toggle Local Engine (MLL)</span>
+                  </label>
+                  <label class="check-item">
+                    <input id="hybrid-api-enabled" type="checkbox" />
+                    <span>Toggle API Engine</span>
+                  </label>
+                  <label class="check-item">
+                    <input id="hybrid-prefer-local" type="checkbox" />
+                    <span>Preferir local sobre API</span>
+                  </label>
+                  <p id="hybrid-status" class="mono">Estado broker: cargando...</p>
+                  <p id="hybrid-budget" class="mono">Budget: --</p>
+                  <div id="hybrid-provider-toggles" class="check-grid"></div>
+                  <div class="item-actions">
+                    <button id="hybrid-save-btn" class="ui-btn ui-btn-primary" type="submit">Guardar Toggles</button>
+                    <button id="hybrid-refresh-btn" class="ui-btn ui-btn-secondary" type="button">Refresh Broker</button>
+                    <button id="hybrid-budget-reset-btn" class="ui-btn ui-btn-secondary" type="button">Reset Budget (Admin)</button>
+                  </div>
+                </form>
+
+                <form id="hybrid-dispatch-form" class="app-form-block auth-gated">
+                  <h3>Hybrid Dispatch</h3>
+                  <p class="mono">Lanza tareas AI-first (local/API) con enrutamiento automático del broker.</p>
+                  <label class="ui-field">
+                    <span class="ui-label">Category</span>
+                    <select id="hybrid-dispatch-category" class="ui-select">
+                      <option value="GEOMETRY_3D">GEOMETRY_3D</option>
+                      <option value="LOGIC_GEN">LOGIC_GEN</option>
+                      <option value="VOICE_ID">VOICE_ID</option>
+                      <option value="VIDEO_ANIMATION">VIDEO_ANIMATION</option>
+                    </select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Provider (optional override)</span>
+                    <select id="hybrid-dispatch-provider-id" class="ui-select">
+                      <option value="">auto (router decide)</option>
+                    </select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Prompt (optional)</span>
+                    <textarea
+                      id="hybrid-dispatch-prompt"
+                      class="ui-textarea"
+                      rows="3"
+                      placeholder="Ej: Personaje anime con estilo guerrero futurista..."
+                    ></textarea>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Payload JSON</span>
+                    <textarea id="hybrid-dispatch-payload" class="ui-textarea mono" rows="4">{}</textarea>
+                  </label>
+                  <label class="check-item">
+                    <input id="hybrid-dispatch-async" type="checkbox" checked />
+                    <span>Ejecutar como job async (recomendado para Meshy)</span>
+                  </label>
+                  <p id="hybrid-dispatch-status" class="mono">Estado dispatch: listo.</p>
+                  <div class="item-actions">
+                    <button id="hybrid-dispatch-run-btn" class="ui-btn ui-btn-primary" type="submit">Run Hybrid Dispatch</button>
+                    <button id="hybrid-dispatch-clear-btn" class="ui-btn ui-btn-secondary" type="button">Clear Output</button>
+                  </div>
+                  <pre id="hybrid-dispatch-output" class="mono ai-test-output">Sin ejecucion.</pre>
+                  <div id="hybrid-dispatch-links" class="item-actions"></div>
+                </form>
+
+                <form id="vault-asset-form" class="app-form-block auth-gated">
+                  <h3>Asset Vault (No-Code)</h3>
+                  <p class="mono">Importa al Vault global y linkea assets a proyectos sin duplicar archivos.</p>
+                  <label class="ui-field">
+                    <span class="ui-label">Asset Type</span>
+                    <select id="vault-asset-type" class="ui-select">
+                      <option value="model">model</option>
+                      <option value="material">material</option>
+                      <option value="rig">rig</option>
+                      <option value="anim">anim</option>
+                      <option value="prefab">prefab</option>
+                      <option value="terrain">terrain</option>
+                      <option value="scene">scene</option>
+                      <option value="pack">pack</option>
+                    </select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Name</span>
+                    <input id="vault-asset-name" class="ui-input" type="text" minlength="2" maxlength="160" required />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Tags (csv)</span>
+                    <input id="vault-asset-tags" class="ui-input mono" type="text" placeholder="anime,hero,starter" />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Dedupe Hash (optional)</span>
+                    <input id="vault-asset-dedupe" class="ui-input mono" type="text" placeholder="HASH_BASE_001" />
+                  </label>
+                  <button class="ui-btn ui-btn-primary" type="submit">Crear Asset Record</button>
+                </form>
+
+                <form id="vault-upload-form" class="app-form-block auth-gated">
+                  <h3>Upload Binary to Vault</h3>
+                  <label class="ui-field">
+                    <span class="ui-label">Asset</span>
+                    <select id="vault-upload-asset-id" class="ui-select"></select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Role</span>
+                    <input id="vault-upload-role" class="ui-input" type="text" value="model" />
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">File</span>
+                    <input id="vault-upload-file" class="ui-input" type="file" />
+                  </label>
+                  <button class="ui-btn ui-btn-secondary" type="submit">Subir Archivo</button>
+                </form>
+
+                <form id="vault-link-form" class="app-form-block auth-gated">
+                  <h3>Add to Project (Reference)</h3>
+                  <label class="ui-field">
+                    <span class="ui-label">Project</span>
+                    <select id="vault-link-project-id" class="ui-select"></select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Asset</span>
+                    <select id="vault-link-asset-id" class="ui-select"></select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Embed Mode</span>
+                    <select id="vault-link-embed-mode" class="ui-select">
+                      <option value="reference">reference</option>
+                      <option value="embed">embed</option>
+                    </select>
+                  </label>
+                  <label class="ui-field">
+                    <span class="ui-label">Overrides JSON</span>
+                    <textarea id="vault-link-overrides" class="ui-textarea mono" rows="3">{}</textarea>
+                  </label>
+                  <div class="item-actions">
+                    <button id="vault-link-submit-btn" class="ui-btn ui-btn-primary" type="submit">Link Asset</button>
+                    <button id="vault-refresh-btn" class="ui-btn ui-btn-secondary" type="button">Refresh Vault</button>
+                  </div>
+                </form>
+
+                <article class="result-card">
+                  <h3>Vault Assets</h3>
+                  <ul id="vault-assets-list" class="activity-list compact-list"></ul>
+                </article>
+
+                <article class="result-card">
+                  <h3>Project Assets</h3>
+                  <ul id="vault-project-assets-list" class="activity-list compact-list"></ul>
+                </article>
+
                 <form id="ai-permissions-form" class="app-form-block auth-gated">
                   <h3>AI Tool Permissions</h3>
                   <p class="mono">Default OFF. Red = blocked, green = allowed.</p>

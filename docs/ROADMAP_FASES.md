@@ -64,6 +64,15 @@ Avance:
   - timeouts y retry controlado en llamadas LLM.
   - mejoras de estabilidad ReyCAD en evaluator/CSG fallback.
   - chunking manual de build ReyCAD.
+- ReyCAD MaterialLab Pro:
+  - editor dockable de materiales PBR avanzado.
+  - asignación masiva por selección con undo/redo consistente.
+  - import/export JSON de materiales para reutilización.
+- ACS Workspace Training:
+  - módulo `Training` integrado como tab nativa del workspace.
+  - creación/listado de jobs desde el módulo con gating por permisos ACS.
+- ACS Workspace Training Ops Admin:
+  - módulo `Training Ops` para admin con métricas de cola, alertas y control de DLQ (requeue individual y batch).
 
 Pendiente:
 - Worker/cola distribuida durable para training.

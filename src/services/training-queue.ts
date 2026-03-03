@@ -18,6 +18,13 @@ type TrainingDlqPayload = {
   reason: string;
 };
 
+export type TrainingQueueConsumeContext = {
+  jobId: string;
+  queueJobId: string;
+  attempt: number;
+  maxAttempts: number;
+};
+
 export type TrainingDlqItem = {
   id: string;
   name: string;
@@ -72,6 +79,7 @@ type RedisConnectionOptions = {
 let queue: Queue | null = null;
 let dlq: Queue | null = null;
 let worker: Worker | null = null;
+const queueDebug = process.env.IT_DEBUG_CHILDREN === "1" || process.env.TRAINING_QUEUE_DEBUG === "1";
 
 function isRedisConfigured(): boolean {
   return Boolean(env.REDIS_URL && env.REDIS_URL.trim().length > 0);
@@ -141,6 +149,10 @@ function sanitizeQueueNumber(value: number, fallback: number, min: number, max: 
   return Math.min(max, Math.max(min, rounded));
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getQueueCounts(queueInstance: Queue): Promise<TrainingQueueCountSnapshot> {
   const counts = await queueInstance.getJobCounts("waiting", "active", "completed", "failed", "delayed", "paused");
   return {
@@ -194,7 +206,6 @@ async function pushFailedJobToDlq(job: {
 
       const dlqQueue = getDlqQueue();
       await dlqQueue.add("training.job.failed", payload, {
-        jobId: `${payload.queueJobId}:${payload.failedAt}`,
         removeOnComplete: 1000,
         attempts: 1
       });
@@ -238,16 +249,68 @@ export async function dispatchTrainingJobToQueue(jobId: string): Promise<void> {
         requestId: traceContext?.requestId
       } satisfies TrainingQueuePayload;
 
+      const existingBeforeAdd = await q.getJob(jobId);
+      if (existingBeforeAdd) {
+        const existingState = await existingBeforeAdd.getState();
+        if (queueDebug) {
+          console.log("[training-queue][dispatch] precheck existing state", { jobId, state: existingState });
+        }
+
+        if (existingState === "completed" || existingState === "failed") {
+          await existingBeforeAdd.remove();
+          if (queueDebug) {
+            console.log("[training-queue][dispatch] removed terminal existing job before enqueue", {
+              jobId,
+              state: existingState
+            });
+          }
+        } else if (existingState === "waiting" || existingState === "delayed") {
+          return;
+        } else if (existingState === "active") {
+          // Requeue can race against an old active queue job with the same jobId.
+          // Wait for terminal transition, then recycle if needed.
+          const waitUntilMs = Date.now() + Math.max(6_000, Math.min(backoffDelay * 20, 12_000));
+          let recycled = false;
+          while (Date.now() < waitUntilMs) {
+            await sleep(200);
+            const refreshed = await q.getJob(jobId);
+            if (!refreshed) {
+              recycled = true;
+              break;
+            }
+
+            const refreshedState = await refreshed.getState();
+            if (refreshedState === "completed" || refreshedState === "failed") {
+              await refreshed.remove();
+              recycled = true;
+              break;
+            }
+
+            if (refreshedState === "waiting" || refreshedState === "delayed") {
+              return;
+            }
+          }
+
+          if (!recycled) {
+            return;
+          }
+        } else {
+          return;
+        }
+      }
+
       try {
         await q.add("training.job", payload, queueJobOptions);
+        if (queueDebug) {
+          console.log("[training-queue][dispatch] enqueued", { jobId });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to enqueue training job";
         if (!(message.includes("Job") && message.includes("already exists"))) {
           throw new Error(`Failed to enqueue training job ${jobId}: ${message}`);
         }
 
-        // Queue dedupe by jobId can happen on retries/recovery. If the old job is terminal,
-        // recycle it so the training job can be re-dispatched.
+        // Race fallback: if duplicate appears between precheck and add, recycle terminal job once.
         const existing = await q.getJob(jobId);
         if (!existing) {
           await q.add("training.job", payload, queueJobOptions);
@@ -466,7 +529,7 @@ export async function requeueTrainingDlqJob(
   );
 }
 
-export async function startTrainingQueueConsumer(handler: (jobId: string) => Promise<void>): Promise<void> {
+export async function startTrainingQueueConsumer(handler: (context: TrainingQueueConsumeContext) => Promise<void>): Promise<void> {
   if (!isRedisTrainingQueueEnabled()) {
     return;
   }
@@ -482,6 +545,15 @@ export async function startTrainingQueueConsumer(handler: (jobId: string) => Pro
       if (typeof payload?.jobId !== "string" || payload.jobId.length === 0) {
         throw new Error("Invalid training queue payload");
       }
+      const maxAttemptsRaw = typeof job.opts.attempts === "number" ? job.opts.attempts : 1;
+      const maxAttempts = sanitizeQueueNumber(maxAttemptsRaw, 1, 1, 50);
+      const attempt = sanitizeQueueNumber(job.attemptsMade + 1, 1, 1, 50);
+      const consumeContext: TrainingQueueConsumeContext = {
+        jobId: payload.jobId,
+        queueJobId: String(job.id ?? ""),
+        attempt,
+        maxAttempts
+      };
 
       const traceId = typeof payload.traceId === "string" && payload.traceId.trim().length > 0 ? payload.traceId : createTraceId();
 
@@ -499,11 +571,29 @@ export async function startTrainingQueueConsumer(handler: (jobId: string) => Pro
               attributes: {
                 queueName: env.TRAINING_QUEUE_NAME,
                 trainingJobId: String(payload.jobId ?? ""),
-                queueJobId: String(job.id ?? "")
+                queueJobId: String(job.id ?? ""),
+                attempt,
+                maxAttempts
               }
             },
             async () => {
-              await handler(payload.jobId as string);
+              if (queueDebug) {
+                console.log("[training-queue][consume] start", {
+                  queueJobId: String(job.id ?? ""),
+                  trainingJobId: String(payload.jobId ?? ""),
+                  attempt,
+                  maxAttempts
+                });
+              }
+              await handler(consumeContext);
+              if (queueDebug) {
+                console.log("[training-queue][consume] done", {
+                  queueJobId: String(job.id ?? ""),
+                  trainingJobId: String(payload.jobId ?? ""),
+                  attempt,
+                  maxAttempts
+                });
+              }
             }
           )
       );
@@ -530,7 +620,8 @@ export async function startTrainingQueueConsumer(handler: (jobId: string) => Pro
 
     const maxAttemptsRaw = typeof job.opts.attempts === "number" ? job.opts.attempts : 1;
     const maxAttempts = sanitizeQueueNumber(maxAttemptsRaw, 1, 1, 50);
-    const exhausted = job.attemptsMade >= maxAttempts;
+    const unrecoverable = error?.name === "UnrecoverableError";
+    const exhausted = unrecoverable || job.attemptsMade >= maxAttempts;
     if (!exhausted) {
       return;
     }

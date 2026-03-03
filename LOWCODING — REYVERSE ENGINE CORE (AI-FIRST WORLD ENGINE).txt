@@ -1,0 +1,513 @@
+CODEX: IMPLEMENTAR "Reyverse Engine Core"
+
+OBJETIVO:
+analisar el motor reycard y  compararlo con este lowcodin lo que le falte  
+a reycar de aqui implementarselo se que tenemos mucho implementado pero falta mucho 
+
+- Scene Graph
+- ECS (Entity Component System)
+- Render Pipeline PBR
+- Physics Engine (Rapier WASM)
+- Collision System
+- Animation + Rig System
+- Particle System GPU
+- Terrain System
+- Asset Import/Adapt System
+- Texture Painter
+- Mannequin System
+- World Serialization
+- AI Tool Integration Layer
+- Performance Scaling System (Low/High auto mode)
+=====================================================
+0️⃣ PRINCIPIOS FUNDAMENTALES
+=====================================================
+
+Arquitectura modular.
+
+Nada acoplado al TCG.
+
+Render independiente del juego.
+
+AI interactúa vía Tool API.
+
+Todo versionado por módulo.
+
+Performance escalable automático.
+
+=====================================================
+1️⃣ STACK TECNOLÓGICO BASE
+=====================================================
+Rendering
+
+Three.js
+
+React Three Fiber
+
+WebGL2
+
+Preparación futura WebGPU
+
+three-mesh-bvh
+
+postprocessing
+
+custom GLSL shaders
+
+Física
+
+Rapier.js (WASM)
+
+Networking
+
+WebSocket
+
+Authoritative Server
+
+Backend
+
+Node + Fastify
+
+Postgres
+
+Redis
+
+S3 storage
+
+=====================================================
+2️⃣ ESTRUCTURA
+=====================================================
+/engine-core
+  /core
+    Engine.ts
+    SceneGraph.ts
+    Entity.ts
+    Component.ts
+    System.ts
+  /render
+    Renderer.ts
+    MaterialSystem.ts
+    ShaderLibrary.ts
+    PostFX.ts
+  /physics
+    PhysicsWorld.ts
+    RigidBody.ts
+    Collider.ts
+  /animation
+    Skeleton.ts
+    Bone.ts
+    Animator.ts
+    KeyframeTrack.ts
+  /particles
+    ParticleSystem.ts
+    GPUEmitter.ts
+  /terrain
+    TerrainManager.ts
+    Heightmap.ts
+  /assets
+    AssetManager.ts
+    Importer.ts
+    Adapter.ts
+  /mannequin
+    MannequinBase.ts
+    SkinSystem.ts
+  /painter
+    TexturePainter.ts
+  /performance
+    QualityManager.ts
+  /ai-bridge
+    EngineToolAPI.ts
+=====================================================
+3️⃣ ECS SYSTEM (FUNDAMENTAL)
+=====================================================
+
+Implementar ECS:
+
+Entity:
+
+id
+
+components[]
+
+Component:
+
+Transform
+
+MeshRenderer
+
+RigidBody
+
+Collider
+
+Animator
+
+ParticleEmitter
+
+Script
+
+AudioSource
+
+Light
+
+System:
+
+RenderSystem
+
+PhysicsSystem
+
+AnimationSystem
+
+ParticleSystem
+
+ScriptSystem
+
+Update Loop:
+
+engine.update(deltaTime)
+
+Orden:
+
+Input
+
+Script
+
+Physics
+
+Animation
+
+Render
+
+=====================================================
+4️⃣ PHYSICS SYSTEM
+=====================================================
+
+PhysicsWorld:
+
+gravedad configurable
+
+step simulation
+
+collision events
+
+triggers
+
+raycast
+
+Colliders:
+
+Box
+
+Sphere
+
+Capsule
+
+Mesh (BVH optimized)
+
+Soporte:
+
+Ragdoll
+
+Constraints
+
+Impulse
+
+Freeze rotation
+
+Kinematic bodies
+
+=====================================================
+5️⃣ RIG + ANIMATION SYSTEM
+=====================================================
+
+Skeleton:
+
+Bone hierarchy
+
+Bind pose
+
+Inverse bind matrices
+
+Animator:
+
+Play
+
+Blend
+
+Crossfade
+
+Layering
+
+Speed control
+
+Keyframe interpolation:
+
+Linear
+
+Cubic
+
+Quaternion SLERP
+
+=====================================================
+6️⃣ PARTICLE SYSTEM GPU
+=====================================================
+
+ParticleSystem:
+
+GPU instanced
+
+velocity
+
+lifetime
+
+gravity
+
+turbulence noise
+
+collision detection opcional
+
+Shaders:
+
+Fire
+
+Smoke
+
+Energy
+
+Hologram
+
+Sparks
+
+=====================================================
+7️⃣ TERRAIN SYSTEM
+=====================================================
+
+Heightmap:
+
+raise
+
+lower
+
+smooth
+
+flatten
+
+Texture painting:
+
+multi-layer
+
+blend map
+
+Vegetation:
+
+instanced mesh scatter
+
+Water:
+
+planar reflection
+
+wave shader
+
+=====================================================
+8️⃣ ASSET IMPORT SYSTEM
+=====================================================
+
+Soportar:
+
+GLB
+
+GLTF
+
+OBJ
+
+FBX
+
+Al importar:
+
+Normalizar escala
+
+Centrar pivote
+
+Generar collider automático
+
+Optimizar geometría
+
+Convertir materiales a PBR interno
+
+Guardar versión adaptada.
+
+=====================================================
+9️⃣ MANNEQUIN SYSTEM
+=====================================================
+
+Base models:
+
+humano
+
+criatura
+
+mascota
+
+carta flotante
+
+Funciones:
+
+recolor
+
+apply texture
+
+change material
+
+apply shader rareza
+
+save preset
+
+=====================================================
+🔟 TEXTURE PAINTER
+=====================================================
+
+Permitir:
+
+Upload image
+
+Proyección UV automática
+
+Pintado directo canvas
+
+Blend overlay
+
+Export texture
+
+Integración con rareza (foil, holo, etc).
+
+=====================================================
+11️⃣ PERFORMANCE AUTO-SCALING
+=====================================================
+
+QualityManager:
+
+Detectar:
+
+FPS
+
+GPU capability
+
+Device type
+
+Ajustar:
+
+sombras
+
+partículas
+
+postFX
+
+resolución interna
+
+LOD meshes
+
+Modo:
+
+Ultra
+
+High
+
+Medium
+
+Low
+
+Auto
+
+=====================================================
+12️⃣ AI TOOL API
+=====================================================
+
+EngineToolAPI expone:
+
+createEntity()
+
+modifyMesh()
+
+applyPhysics()
+
+spawnParticle()
+
+generateTerrain()
+
+importAsset()
+
+paintTexture()
+
+simulateScene()
+
+La AI puede manipular el mundo directamente.
+
+=====================================================
+13️⃣ SERIALIZACIÓN
+=====================================================
+
+Guardar mundo como:
+
+world.json
+assets references
+physics config
+lighting config
+
+Permitir:
+
+Export
+
+Import
+
+Versionado
+
+=====================================================
+14️⃣ MULTIPLAYER READY
+=====================================================
+
+Server authoritative:
+
+posición validada en servidor
+
+física validada
+
+anti-cheat AI
+
+sync state via delta updates
+
+=====================================================
+15️⃣ FASES DE IMPLEMENTACIÓN
+=====================================================
+
+FASE 1:
+ECS + Renderer base
+Commit.
+
+FASE 2:
+Physics + Collisions
+Commit.
+
+FASE 3:
+Animation + Rig
+Commit.
+
+FASE 4:
+Asset Import + Adapter
+Commit.
+
+FASE 5:
+Mannequin + Texture Painter
+Commit.
+
+FASE 6:
+Particles + Terrain
+Commit.
+
+FASE 7:
+Performance scaling
+Commit.
+
+FASE 8:
+AI Tool Bridge
+Commit.
+
+Tag final:
+engine-core-v1

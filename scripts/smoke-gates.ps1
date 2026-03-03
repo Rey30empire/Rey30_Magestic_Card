@@ -101,42 +101,9 @@ try {
 
   $adminId = [string]$regAdmin.Body.user.id
   $creatorId = [string]$regCreator.Body.user.id
-
-  $promoteScript = @'
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database(process.env.DB_PATH || "data/rey30.db");
-const adminUserId = process.argv[2];
-const now = new Date().toISOString();
-
-function fail(err) {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
-}
-
-db.serialize(() => {
-  db.get("SELECT id FROM roles WHERE key = 'admin'", (err, roleRow) => {
-    if (err) return fail(err);
-    if (!roleRow) return fail(new Error("admin role not found"));
-
-    db.run("UPDATE users SET role = 'admin' WHERE id = ?", [adminUserId], (err2) => {
-      if (err2) return fail(err2);
-
-      db.run(
-        "INSERT OR IGNORE INTO user_roles (id, user_id, role_id, assigned_by, created_at) VALUES (lower(hex(randomblob(16))), ?, ?, NULL, ?)",
-        [adminUserId, roleRow.id, now],
-        (err3) => {
-          if (err3) return fail(err3);
-          console.log("PROMOTED_ADMIN");
-          db.close();
-        }
-      );
-    });
-  });
-});
-'@
-
-  $promoteOut = $promoteScript | node - $adminId
-  if (-not ($promoteOut -match "PROMOTED_ADMIN")) {
+  $promoteScriptPath = Join-Path $repoRoot "scripts\promote-admin.cjs"
+  $promoteOut = node $promoteScriptPath $adminId 2>&1
+  if ($LASTEXITCODE -ne 0 -or -not ($promoteOut -match "PROMOTED_ADMIN")) {
     throw "Admin promotion failed: $promoteOut"
   }
 

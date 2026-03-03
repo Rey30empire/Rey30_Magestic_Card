@@ -1,0 +1,373 @@
+0) OBJETIVO
+
+Agregar a la app un sistema tipo Unity/Unreal:
+
+Editor de escenas (Level Editor)
+
+Botón Play que corre el juego en tiempo real dentro del editor (PIE)
+
+Controles por defecto (caminar WASD, saltar, agacharse, correr, disparar)
+
+Editor de teclas (rebind)
+
+Compilador/exportación (Web + Desktop) + paquete descargable
+
+Compartir: zip, link o envío por correo (si hay backend)
+
+1) NOMBRAR EL MÓDULO (IMPORTANTE PARA ORGANIZACIÓN)
+
+Crear subsistema llamado:
+
+ReyPlay Studio
+
+con 3 paquetes:
+
+ReyPlayEditor (scene editor)
+
+ReyPlayRuntime (juego corriendo)
+
+ReyPlayBuilder (export/packaging)
+
+2) CONCEPTO CLAVE: “DOBLE MUNDO”
+
+Para que Play no rompa tu escena del editor, necesitas dos “worlds”:
+
+EditorWorld: donde editas (gizmos, selección, arrastre)
+
+PlayWorld: copia clonada de la escena para correr juego
+
+Flujo Play:
+
+Clonar escena del EditorWorld a PlayWorld
+
+Activar sistemas runtime (físicas, input, anim, scripts)
+
+Al parar, destruir PlayWorld y regresar intacto al EditorWorld
+
+3) SISTEMA DE ESCENAS (SCENE GRAPH + ECS)
+3.1 Scene Graph
+
+Cada escena es un árbol de nodos:
+
+Node (id, name, transform, parent, children)
+
+Components (mesh, material, rigidbody, collider, camera, light, animator, script)
+
+3.2 ECS (liviano pero potente)
+
+Implementar un ECS simple (Entity-Component-System) para runtime:
+
+Entities: ids
+
+Components: Transform, Render, Rigidbody, Collider, Animator, CharacterController, InputReceiver, Audio
+
+Systems: PhysicsSystem, CharacterSystem, AnimationSystem, ScriptSystem, RenderSystem
+
+Editor usa el graph; Runtime usa ECS (copia del graph).
+
+4) PLAY-IN-EDITOR (PIE)
+4.1 Botones
+
+▶ Play
+
+⏸ Pause
+
+⏭ Step (1 frame)
+
+⏹ Stop
+
+4.2 Estados
+
+EDIT
+
+PLAYING
+
+PAUSED
+
+4.3 Reglas
+
+En PLAY:
+
+editor gizmos se desactivan
+
+selección se bloquea o se vuelve “debug select”
+
+cámara puede cambiar a cámara del jugador
+
+En STOP:
+
+se destruye PlayWorld
+
+se restaura todo
+
+5) CONTROLES POR DEFECTO (LO “NORMAL” QUE QUIERES)
+
+Crear un Default Controller Pack que venga listo:
+
+5.1 Input Actions (estilo moderno)
+
+Definir acciones abstractas (no teclas directas):
+
+Move (Vector2)
+
+Look (Vector2)
+
+Jump (Button)
+
+Crouch (Toggle/Hold)
+
+Sprint (Hold)
+
+Fire (Button)
+
+Aim (Hold)
+
+Reload (Button)
+
+Interact (Button)
+
+5.2 Bindings por defecto
+
+WASD = Move
+
+Mouse = Look
+
+Space = Jump
+
+Ctrl = Crouch
+
+Shift = Sprint
+
+LMB = Fire
+
+RMB = Aim
+
+R = Reload
+
+E = Interact
+
+5.3 Editor de teclas (Rebind)
+
+UI:
+
+Lista de acciones
+
+Cada acción muestra bindings
+
+Botón “Rebind” → escucha la siguiente tecla
+
+Guardar en input.profile.json
+
+Per-project o global (elige ambos)
+
+6) PERSONAJE JUGABLE “LISTO” (FPS/TPS)
+
+Crear componente:
+
+6.1 CharacterController
+
+Velocidad caminar/correr
+
+Jump height
+
+Gravedad
+
+Crouch (altura capsule)
+
+Step offset (subir escalones)
+
+Slope limit (pendientes)
+
+Ground detection (raycast)
+
+6.2 Cámara
+
+FPS: cámara en “head”
+
+TPS: cámara follow con colisión (no atravesar paredes)
+
+6.3 Animación
+
+Animator con estados: idle/walk/run/jump/fall/crouch
+
+BlendTree simple con velocidad
+
+Retarget si el rig es compatible
+
+7) FÍSICAS (LIVIANAS)
+
+Para que sea potente pero ligero:
+
+Usar física moderna eficiente (ej: Rapier) si tu stack es web/desktop.
+
+Collider types: capsule, box, sphere, mesh (mesh solo estático)
+
+Rigidbody: dynamic/kinematic/static
+
+8) “GAME KIT” POR DEFECTO (DISPARAR, INTERACTUAR)
+8.1 WeaponComponent (básico)
+
+Fire rate
+
+Spread
+
+Raycast shooting (ligero)
+
+Impact decals (opcional)
+
+Recoil (cámara)
+
+8.2 InteractComponent
+
+Raycast forward
+
+highlight
+
+onInteract event
+
+9) COMPILADOR / BUILD PIPELINE
+
+Aquí “compilar” en tu caso significa:
+
+Resolver dependencias (assets usados por escena)
+
+Empaquetar (copiar/comprimir assets necesarios)
+
+Generar runtime build (web/desktop)
+
+9.1 Asset Bundling (no duplicar)
+
+Escena tiene refs a Vault (tu biblioteca global)
+
+Builder crea un “build folder” con solo lo necesario:
+
+game.bundle.json (manifest)
+
+assets/ (copias o enlaces)
+
+scenes/
+
+input.profile.json
+
+9.2 Export targets
+
+Web export: genera carpeta lista para host (index.html + js + assets)
+
+Desktop export:
+
+si usas Tauri/Electron: empaquetar como app y meter el bundle dentro
+
+9.3 Optimización automática (para liviano)
+
+Texturas: resize + mipmaps + opcional compresión
+
+Modelos: draco/meshopt si aplica
+
+LOD: auto en props pesados
+
+Streaming: cargar por chunks
+
+10) DESCARGA Y COMPARTIR
+10.1 Download
+
+Botón “Export Build” → genera .zip del build
+
+10.2 Share por correo (opciones)
+
+Opción A (simple): generar .zip + abrir mailto: con asunto + instrucciones
+
+Opción B (pro): subir build a backend → generar link → enviar por email desde servidor
+
+Implementar ambas:
+
+si no hay backend: mailto
+
+si hay backend: upload+email
+
+11) UI MÍNIMA (PERO PRO)
+
+Paneles:
+
+Left: Library/Vault + Project assets
+
+Center: Viewport
+
+Right: Inspector + Components
+
+Bottom: Console + Profiler (lite)
+
+Y un “Game” tab (como Unity):
+
+Scene tab = edición
+
+Game tab = runtime view (cuando está Play)
+
+12) PLAN POR FASES (SIN ROMPER TU APP)
+Fase 1 — PIE + personaje + input
+
+PlayWorld clone
+
+Input actions + rebind UI
+
+CharacterController básico
+
+Stop/Play/Pause
+
+Fase 2 — físicas + animación
+
+Rigidbody/colliders
+
+Animator states
+
+Cámara FPS/TPS
+
+Fase 3 — build/export
+
+Bundle manifest
+
+Export web
+
+Export desktop pack
+
+Fase 4 — share
+
+Zip export
+
+Backend upload + link + email
+
+13) CHECKLIST DE PRUEBAS
+
+En EDIT: mueves objetos normal
+
+Play: personaje camina/salta/agacha/dispara
+
+Stop: nada quedó “modificado” en el editor
+
+Rebind: cambiar jump a otra tecla y persiste
+
+Export web: corre en navegador
+
+Export desktop: abre y carga escena
+
+Build zip: se descarga y alguien más lo ejecuta
+
+
+Cómo lo llamaríamos (nombre cool 😈)
+
+ReyPlay Studio
+
+
+
+ReyBuild Pipeline
+
+
+
+Three
+
+R3F
+
+Babylon
+
+Custom
+
+ librerías  para físicas/inputs/export según stack ⚡🎮

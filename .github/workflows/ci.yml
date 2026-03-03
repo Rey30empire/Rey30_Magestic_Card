@@ -5,9 +5,56 @@ on:
   pull_request:
 
 jobs:
+  security-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Secret Leak Scan
+        run: npm run security:scan:secrets
+
+  reycad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: security-secrets
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: ReyCAD Type Check
+        run: npm run reycad:check
+
+      - name: ReyCAD Build
+        run: npm run reycad:build
+
   backend:
     runs-on: windows-latest
     timeout-minutes: 30
+    needs: security-secrets
+    env:
+      DB_ENGINE: sqlite
 
     steps:
       - name: Checkout
@@ -40,6 +87,9 @@ jobs:
   backend-redis:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: security-secrets
+    env:
+      DB_ENGINE: sqlite
     services:
       redis:
         image: redis:7-alpine
@@ -75,6 +125,9 @@ jobs:
   backend-postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: security-secrets
+    env:
+      DB_ENGINE: sqlite
     services:
       postgres:
         image: postgres:16-alpine
@@ -110,3 +163,79 @@ jobs:
         env:
           POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/rey30_test
         run: npm run test:integration:postgres
+
+  backend-sqlserver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: security-secrets
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: "Developer"
+          MSSQL_SA_PASSWORD: "Str0ngPassw0rd!2026"
+        ports:
+          - 1433:1433
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Wait For SQL Server + Create Test DB
+        env:
+          SQL_SERVER_HOST: 127.0.0.1
+          SQL_SERVER_PORT: 1433
+          SQL_SERVER_USER: sa
+          SQL_SERVER_PASSWORD: Str0ngPassw0rd!2026
+        run: |
+          node -e "const sql=require('mssql'); const cfg={server:process.env.SQL_SERVER_HOST,port:Number(process.env.SQL_SERVER_PORT),user:process.env.SQL_SERVER_USER,password:process.env.SQL_SERVER_PASSWORD,database:'master',options:{encrypt:false,trustServerCertificate:true},connectionTimeout:5000,requestTimeout:5000}; const wait=(ms)=>new Promise(r=>setTimeout(r,ms)); (async()=>{for(let i=0;i<60;i+=1){try{const pool=await sql.connect(cfg); await pool.request().query(\"IF DB_ID('rey30_test') IS NULL CREATE DATABASE rey30_test;\"); await pool.close(); console.log('sqlserver ready'); process.exit(0);}catch(error){console.log('sqlserver not ready yet:', error && error.message ? error.message : String(error)); await wait(2000);}} console.error('sqlserver did not become ready in time'); process.exit(1);})();"
+
+      - name: Build
+        run: npm run build
+
+      - name: SQL Server Full Integration Tests
+        env:
+          DB_ENGINE: sqlserver
+          SQL_SERVER_ENABLED: "true"
+          SQL_SERVER_HOST: 127.0.0.1
+          SQL_SERVER_PORT: 1433
+          SQL_SERVER_DATABASE: rey30_test
+          SQL_SERVER_USER: sa
+          SQL_SERVER_PASSWORD: Str0ngPassw0rd!2026
+          SQL_SERVER_ENCRYPT: "false"
+          SQL_SERVER_TRUST_SERVER_CERTIFICATE: "true"
+          REDIS_URL: redis://127.0.0.1:6379
+        run: npm run test:integration:sqlserver:full
+
+      - name: SQL Server Smoke Tests
+        env:
+          DB_ENGINE: sqlserver
+          SQL_SERVER_ENABLED: "true"
+          SQL_SERVER_HOST: 127.0.0.1
+          SQL_SERVER_PORT: 1433
+          SQL_SERVER_DATABASE: rey30_test
+          SQL_SERVER_USER: sa
+          SQL_SERVER_PASSWORD: Str0ngPassw0rd!2026
+          SQL_SERVER_ENCRYPT: "false"
+          SQL_SERVER_TRUST_SERVER_CERTIFICATE: "true"
+          REDIS_URL: redis://127.0.0.1:6379
+        run: npm run smoke:all

@@ -1,0 +1,508 @@
+LOWCODING PARA CODEX 
+0) Objetivo (lo que vas a implementar)
+
+Construir en ReyCAD Engine editor 3D un sistema completo de:
+
+Maniquíes (Templates/Presets)
+
+Humanoide hombre/mujer, arma, perro, dragón, ave, vehículo simple, planeta, árbol, roca, edificio, terreno, mapa/tiles.
+
+Cada maniquí se comporta como “base mesh” con puntos de anclaje (sockets) y opciones de forma.
+
+Skin System (Foto/Color/Decals) Drag & Drop
+
+Arrastras una foto encima del maniquí → genera una skin automáticamente:
+
+Proyección inteligente (planar/tri-planar/cilíndrica).
+
+“Smart wrap” (sin tocar UV a mano).
+
+Ajuste con sliders (escala, rotación, offset, opacidad, blur, roughness, metalness).
+
+Funciona en: armas, personajes, animales, planetas, props, terreno.
+
+Material System tipo Blender (PBR Node-lite)
+
+No haremos un Blender completo, pero sí un Material Editor “Lite pero pro”:
+
+Librería: Metallic, Plastic, Rubber, Glass, Fabric, Skin, Wood, Stone, Lava, Water, Hologram, Mirror, Double-Sided, Toon.
+
+Parámetros: baseColor, roughness, metalness, normal, AO, emissive, opacity, IOR (glass), clearcoat.
+
+Opciones: double face, mirror, transparent, unlit, emissive bloom (lite), subsurface (fake).
+
+OpenFolder / Asset Browser / Library
+
+Abrir carpeta y “montarla” como un proyecto:
+
+Importar glTF/GLB/OBJ/FBX (según disponibilidad), texturas PNG/JPG, HDRI.
+
+Catálogo: models, textures, materials, decals, scenes.
+
+Mantener assets “solo referenciados” (lazy load) para que la app no se muera.
+
+Escenas + Mundo + Terreno + Mapa
+
+Scene graph, layers, prefabs.
+
+Terrain básico: heightmap, brush sculpt, paint splat (4-8 layers), instancing de árboles/rocas.
+
+Diseño ultra ligero
+
+Evitar cargas pesadas: streaming, LOD, instancing, caché, compresión (Draco/meshopt), mipmaps.
+
+1) Stack recomendado (ligero y poderoso)
+Frontend ReyCAD (web/desktop)
+
+Render: Three.js (o react-three-fiber si ya usas React fuerte).
+
+Helpers: @react-three/drei (orbit controls, loaders, etc).
+
+Import: GLTFLoader + DRACOLoader + MeshoptDecoder.
+
+Estado: Zustand (simple y rápido).
+
+UI: Radix UI / shadcn (paneles, sliders, tabs).
+
+Material editing: panel JSON + previews + presets.
+
+Post: EffectComposer solo para bloom opcional (y desactivable).
+
+Desktop: Tauri (si tienes) o Electron
+
+Tauri recomendado por peso y performance.
+
+OpenFolder real desde Desktop con API nativa (Tauri FS).
+
+Backend (ya existe en tu repo)
+
+Tu backend Node/TS ya está fuerte (auth, ACS, marketplace, etc.) 
+
+Pasted text
+
+
+Vamos a agregar endpoints para:
+
+Guardar proyectos ReyCAD (scene JSON)
+
+Subir assets (si el modo es web)
+
+Librería de materiales y skins
+
+2) Arquitectura del sistema “Maniquí + Skin + Material”
+2.1 Estructuras base (data models)
+
+Implementa estas entidades:
+
+A) MannequinTemplate
+
+id, name, category (humanoid/weapon/animal/planet/terrain/prop)
+
+baseMeshPath (glb)
+
+sockets[] (nombre + transform)
+
+deformControls[] (sliders para morph targets o escalas)
+
+defaultMaterialsPreset
+
+B) MaterialPreset
+
+id, name, type (pbr/glass/mirror/toon/unlit)
+
+params: baseColor, metalness, roughness, normalStrength, emissive, opacity, ior, doubleSided
+
+textureSlots: albedo, normal, roughness, metalness, ao, emissive, opacity
+
+C) SkinLayer
+
+id
+
+mode: color | photo | decal | pattern
+
+transform: scale/rot/offset
+
+mask: alpha / paintMask
+
+blend: normal / multiply / overlay
+
+target: entireMesh | regionSet | materialSlot
+
+D) ProjectScene
+
+nodes[] (scene graph)
+
+assetsIndex (paths + metadata + hashes)
+
+materials[] (instances)
+
+skins[] (stack)
+
+terrain (opcional)
+
+3) Maniquí “sin manipulación manual” (UX: arrastro y se aplica)
+3.1 DropZone universal
+
+Implementa un “DropReceiver” en el viewport:
+
+Si arrastras imagen:
+
+Se crea un SkinLayer tipo “photo”
+
+Se aplica al objeto seleccionado (o al maniquí si es el root)
+
+Si arrastras material preset:
+
+Se aplica al material slot activo
+
+Si arrastras modelo:
+
+Se importa y se agrega a escena (o lo setea como maniquí si es template candidate)
+
+3.2 Auto-proyección de imagen (sin UV)
+
+Implementa 3 estrategias automáticas (elige por heurística):
+
+Triplanar projection (lo mejor para rocas/terreno/planetas/props)
+
+Cylindrical (armas, cuerpos alargados)
+
+Planar (mapas/planes/decals)
+
+UI simple:
+
+Projection: Auto / Tri / Cyl / Planar
+
+Scale / Rotate / Offset
+
+Seam blend (para triplanar)
+
+Roughness & metalness overrides
+
+3.3 “Regiones” sin modelado manual
+
+Para personaje/arma:
+
+Define “RegionSets” por:
+
+Material slots (Head/Body/Arms/Legs)
+
+Vertex color mask (si existe)
+
+Bounding boxes automáticos (head upper 20%, etc)
+Entonces el usuario puede:
+
+“aplicar foto solo a la cara”
+
+“pintar solo el arma barrel”
+sin necesidad de UV editing.
+
+4) Material Editor “tipo Blender” pero Lite (pro y rápido)
+4.1 Editor basado en presets + overrides
+
+No uses nodos completos al inicio; usa:
+
+Preset base (Metal, Rubber, Glass…)
+
+Overrides por sliders
+
+Texture slots opcionales
+
+4.2 Efectos especiales pedidos
+
+Double Face: side = DoubleSide
+
+Mirror: metalness=1, roughness=0..0.03, envMap fuerte
+
+Glass: transmission, ior, thickness, opacity
+
+Hologram: emissive + fresnel fake + scanlines
+
+Toon: toon shading simple (opcional)
+
+4.3 Material Library
+
+Panel “Material Library”:
+
+Cards con preview sphere/cube
+
+Tags: “realista”, “anime”, “sci-fi”, “mundo”
+
+Search
+
+5) Sistema de Pintura (Paint Mode) súper simple
+
+Quieres “pintar como skins”: brocha + máscara.
+
+5.1 Paint Mask (render-to-texture lite)
+
+Implementa:
+
+Texture mask (grayscale) por objeto/material slot (ej 1024–2048)
+
+Brush: size, hardness, opacity
+
+Blend: add/subtract
+
+Undo stack por strokes
+
+Uso:
+
+Pintas una máscara
+
+Luego aplicas foto/material solo donde la máscara deja
+
+Esto te da “pintura real” sin que el usuario manipule UVs.
+
+6) OpenFolder y Asset Browser
+6.1 Desktop (Tauri recomendado)
+
+Implementa “OpenFolder”:
+
+El usuario elige carpeta
+
+Escaneas:
+
+*.glb *.gltf *.png *.jpg *.hdr *.exr *.json
+
+Creas un índice: assets.index.json con hash y metadata
+
+Lazy-load previews (miniaturas) con jobs en background
+
+6.2 Web (fallback)
+
+En web no hay open folder real:
+
+“Import files” multi-select
+
+Se guardan en IndexedDB (o se suben al backend si estás logueado)
+
+Igual se indexan en assetsIndex
+
+6.3 Asset Tools
+
+En el browser:
+
+“Optimize” (draco/meshopt opcional)
+
+“Generate LODs” (solo si es desktop y tienes worker)
+
+“Convert texture to KTX2” (desktop preferido)
+
+7) Mundo, escena, mapa, terreno (lo que pediste)
+7.1 Scene Graph real
+
+Hierarchy panel (scene tree)
+
+Layers (UI toggles)
+
+Prefabs (guardar nodo como template)
+
+Snap/align (grid)
+
+7.2 Terrain básico (MVP)
+
+Heightmap sculpt:
+
+Raise/Lower/Smooth
+
+Paint layers:
+
+4–8 splat layers (grass/rock/sand/snow/mud)
+
+Scatter:
+
+Instancing de árboles/rocas (muy barato)
+
+7.3 Planeta (súper importante)
+
+Planeta = esfera +:
+
+Triplanar textures
+
+Normal map
+
+Rim light / atmosphere fake
+
+Biomas por latitud/altura (opcional)
+
+8) Performance “para que no se buguee” (tu obsesión correcta 😤)
+
+Implementa desde el día 1:
+
+Asset Streaming
+
+No cargues todo; solo lo visible y lo seleccionado.
+
+Texture Budget
+
+Límite por dispositivo:
+
+Mobile: 256–512 MB
+
+Web: 512 MB
+
+Desktop: 1–2 GB
+
+Mipmaps + compressed textures
+
+KTX2 / BasisU cuando sea posible
+
+Instancing
+
+Props repetidos = InstancedMesh
+
+LOD
+
+3 niveles por asset grande
+
+Scene freeze
+
+Si no se mueve, desactiva updates
+
+Autosave incremental
+
+Guardado por diffs (cada X segundos)
+
+Crash-safe
+
+Recovery al reiniciar (último autosave)
+
+9) Entregables (lo que Codex debe crear/modificar)
+9.1 Nuevos módulos ReyCAD
+
+ReyCadViewport (drop + paint)
+
+AssetBrowser (openfolder + library)
+
+MannequinPanel (templates)
+
+MaterialEditorLite
+
+SkinStackPanel (capas tipo Photoshop pero simple)
+
+TerrainToolPanel
+
+ProjectStore (zustand)
+
+9.2 Endpoints backend (si aplica)
+
+POST /api/reycad/projects create/save
+
+GET /api/reycad/projects/:id
+
+POST /api/reycad/assets/upload (web mode)
+
+GET /api/reycad/materials/presets
+
+POST /api/reycad/materials/presets (creación de presets por usuario)
+
+9.3 Formato de proyecto
+
+project.reycad.json (scene + materials + skins)
+
+assets.index.json
+
+10) Plan en fases (para que Codex no haga caos)
+Fase 1 — Maniquí + Material Presets (1er “wow”)
+
+Mannequin templates
+
+Material presets + apply
+
+Asset browser básico (import files)
+
+Save/load scene JSON
+
+Fase 2 — Skin Drag&Drop (la magia)
+
+Drop image => auto-projection => SkinLayer
+
+UI de transform
+
+RegionSets por slots + bounding heuristics
+
+Fase 3 — Paint Mask + decal system
+
+Render-to-texture mask
+
+Brush + undo
+
+Decals con proyección
+
+Fase 4 — OpenFolder real + streaming performance
+
+Desktop openfolder
+
+Index + lazy-load + thumbnails
+
+Texture budgeting
+
+Fase 5 — Terrain + World building
+
+Terrain sculpt + paint layers
+
+Scatter instancing
+
+Prefabs + biomas
+
+11) Reglas duras para Codex (para que no “termine” con UI fea 😅)
+
+UI minimal premium: panel izquierdo (assets), panel derecho (props/material/skins), viewport al centro.
+
+Nada de 20 botones por todos lados: usa Command Palette + shortcuts.
+
+Todo debe funcionar con:
+
+click seleccionar
+
+drag & drop
+
+sliders
+
+Todo debe tener:
+
+Undo/Redo
+
+Autosave
+
+Recovery
+
+12) Checklist de pruebas (Codex debe incluir)
+
+Import glb pesado y comprobar que no crashea
+
+Arrastrar imagen grande y verificar que genera skin
+
+Cambiar material a mirror/double sided
+
+Guardar proyecto, recargar, y que quede igual
+
+Paint mask con 30 strokes, undo/redo
+
+Ideas extra de herramientas “pro” que te convienen (sin volverte Blender)
+
+Aquí van ideas buenísimas (y cada una es distinta, nada repetido):
+
+Material “Smart Mode”
+Un botón “Auto-Realistic”: analiza la foto (contraste/saturación) y ajusta roughness/metalness automáticamente.
+
+Skin Generator por AI local/opcional
+Si el usuario tira una foto, el sistema sugiere:
+
+“skin limpia”
+
+“cel shading”
+
+“sci-fi camo”
+
+“graffiti”
+(esto puede correr local o API, según plataforma)
+
+Auto-rig “lite” solo para maniquí humanoide
+No rig completo: solo presets de animación y sockets; que el usuario no sufra.
+
+Swap de variantes
+Un mismo maniquí con “variantes” (cabeza A/B/C, orejas, cuernos) como sliders.
+
+Marketplace de skins/materiales conectado a tu backend

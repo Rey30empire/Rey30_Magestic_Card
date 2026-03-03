@@ -2,7 +2,7 @@ import engineApi from "../../engine/api/engineApi";
 import { useEditorStore } from "../../editor/state/editorStore";
 import type { PrimitiveType } from "../../engine/scenegraph/types";
 
-const primitiveButtons: PrimitiveType[] = ["box", "cylinder", "sphere", "cone", "text"];
+const primitiveButtons: PrimitiveType[] = ["box", "cylinder", "sphere", "cone", "text", "terrain"];
 
 export default function ScenePanel(): JSX.Element {
   const nodes = useEditorStore((state) => state.data.project.nodes);
@@ -70,6 +70,42 @@ export default function ScenePanel(): JSX.Element {
             type="button"
           >
             Boolean Subtract A-B
+          </button>
+        </div>
+
+        <p className="muted">Phase 4 - Mannequin + Texture Prep</p>
+        <div className="row wrap">
+          <button className="btn" onClick={() => engineApi.loadMannequin("humanoid")} type="button">
+            Mannequin Humanoid
+          </button>
+          <button className="btn" onClick={() => engineApi.loadMannequin("creature")} type="button">
+            Mannequin Creature
+          </button>
+          <button className="btn" onClick={() => engineApi.loadMannequin("pet")} type="button">
+            Mannequin Pet
+          </button>
+          <button className="btn" onClick={() => engineApi.loadMannequin("floatingCard")} type="button">
+            Mannequin Card
+          </button>
+        </div>
+
+        <p className="muted">Phase 5 - Arena Generator</p>
+        <div className="row wrap">
+          <button className="btn btn-primary" onClick={() => engineApi.generateArena()} type="button">
+            Generate Arena
+          </button>
+        </div>
+
+        <p className="muted">Phase 6 - Battle Integration</p>
+        <div className="row wrap">
+          <button className="btn" onClick={() => engineApi.setupBattleScene()} type="button">
+            Setup Battle
+          </button>
+          <button className="btn btn-primary" onClick={() => engineApi.playBattleClash(16)} type="button">
+            Play Clash
+          </button>
+          <button className="btn btn-danger" onClick={() => engineApi.stopBattleScene()} type="button">
+            Stop Battle
           </button>
         </div>
       </div>

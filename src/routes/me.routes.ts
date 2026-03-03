@@ -509,6 +509,7 @@ function buildAcsModules(input: {
   const rulesManage = hasAnyPermission(permissions, ["rules.manage.agent", "rules.manage.project", "rules.manage.global"]) || isAdmin;
   const skillsCatalog = hasAnyPermission(permissions, ["skills.create", "skills.tests.run"]) || isAdmin;
   const toolsManage = hasAnyPermission(permissions, ["agents.tools.assign", "dev_tools.access"]) || isAdmin;
+  const trainingOpsManage = hasPermission(permissions, "admin.training.manage") || isAdmin;
 
   return [
     {
@@ -558,6 +559,12 @@ function buildAcsModules(input: {
       title: "Training",
       available: hasPermission(permissions, "training.create") || isAdmin,
       reason: hasPermission(permissions, "training.create") || isAdmin ? (isDesktop ? null : "Desktop required for fine-tuning/lora/adapter") : "Missing permission: training.create"
+    },
+    {
+      key: "trainingOps",
+      title: "Training Ops",
+      available: trainingOpsManage,
+      reason: trainingOpsManage ? null : "Missing permission: admin.training.manage"
     },
     {
       key: "sandbox",

@@ -29,6 +29,31 @@ slot = rc.create.box(w=55, h=12, d=4, y=8, z=20)
 rc.hole(slot)
 rc.group([body, slot], mode="solid")
 `
+  },
+  {
+    label: "Terrain",
+    code: `import reycad as rc
+terrain = rc.create.terrain(w=180, d=180, segments=64, height_seed=99, height_scale=14)
+rc.frame([terrain])
+`
+  },
+  {
+    label: "Physics Drop",
+    code: `import reycad as rc
+box = rc.create.box(w=12, h=12, d=12, y=40)
+rc.physics.collider(box, shape="box", size=(12,12,12))
+rc.physics.rigidbody(box, mode="dynamic", mass=1)
+rc.physics.world(enabled=True, simulate=True, gravity=(0,-9.81,0), floor_y=0, backend="lite")
+rc.frame([box])
+`
+  },
+  {
+    label: "Battle Clash",
+    code: `import reycad as rc
+rc.physics.battle_setup()
+rc.physics.battle_clash(impulse=18)
+# rc.physics.battle_stop()
+`
   }
 ];
 

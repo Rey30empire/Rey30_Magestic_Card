@@ -150,8 +150,9 @@ test("cards creator/editor flow supports drafts, versioning and state transition
       "x-client-platform": "web"
     };
 
+    const draftName = `Aegis Vanguard ${Date.now()}`;
     const draftPayload = {
-      name: "Aegis Vanguard",
+      name: draftName,
       rarity: "epic",
       cardClass: "guardian",
       abilities: ["shield", "regen"],
@@ -175,7 +176,7 @@ test("cards creator/editor flow supports drafts, versioning and state transition
       "/api/cards/drafts",
       {
         ...draftPayload,
-        name: "  aegis vanguard ",
+        name: `  ${draftName.toLowerCase()} `,
         cardClass: "Guardian",
         abilities: ["REGEN", "shield"]
       },

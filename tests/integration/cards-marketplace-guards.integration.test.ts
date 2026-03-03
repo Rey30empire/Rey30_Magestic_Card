@@ -107,8 +107,9 @@ test("cards and marketplace guards prevent duplicates and double selling", async
     const seller = await registerUser(`seller_${Date.now()}`, "SellerPass123!");
     const buyer = await registerUser(`buyer_${Date.now()}`, "BuyerPass123!");
 
+    const uniqueCardName = `Atlas Guardian ${Date.now()}`;
     const cardPayload = {
-      name: "Atlas Guardian",
+      name: uniqueCardName,
       rarity: "epic",
       cardClass: "tank",
       abilities: ["fortify", "taunt"],
@@ -134,7 +135,7 @@ test("cards and marketplace guards prevent duplicates and double selling", async
       "/api/cards",
       {
         ...cardPayload,
-        name: " atlas guardian ",
+        name: `  ${uniqueCardName.toUpperCase()}  `,
         cardClass: "Tank",
         abilities: ["TAUNT", "fortify"]
       },

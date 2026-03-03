@@ -76,6 +76,40 @@ Tareas:
 - [x] fallback CSG no bloqueante (chunked/skip pesado con warning).
 - [x] optimización de build ReyCAD con `manualChunks`.
 
+### Paquete 7.7 - MaterialLab Pro (completado)
+Objetivo:
+- cerrar la brecha de edición de materiales en ReyCAD con flujo completo de creación, edición avanzada y aplicación masiva sin romper undo/redo.
+
+Tareas:
+- [x] extensión de modelo `MaterialDef.pbr` con canales avanzados (emissive/transmission/ior y map ids).
+- [x] soporte de render `MeshPhysicalMaterial` para nuevos parámetros PBR.
+- [x] comando batch `setMaterialBatchCommand` + API canónica `setNodeMaterialBatch`.
+- [x] panel dockable `MaterialLab` (crear, editar, aplicar a selección, import/export JSON, preview).
+- [x] actualización `AssetsPanel` para suscribirse a `project.materials` y usar aplicación batch.
+- [x] actualización de layout a `reycad.layout.v4` para exponer panel nuevo por defecto.
+- [x] cobertura unitaria para batch command.
+
+### Paquete 7.8 - Training Workspace Module (completado)
+Objetivo:
+- cerrar el faltante de pantalla `Training` dentro del `ACS Workspace` para alinear la consola web con el contrato de módulos de ACS Home.
+
+Tareas:
+- [x] tab `Training` en `ACS Workspace` enlazada al módulo `training`.
+- [x] formulario de creación y lista de jobs movidos al panel de módulo (sin duplicar IDs ni lógica).
+- [x] validación `requireTab(\"training\")` al crear jobs desde consola.
+- [x] regresión frontend ajustada con marker del nuevo tab (`console-module-tab-training`).
+
+### Paquete 7.9 - Training Ops Admin Workspace (completado)
+Objetivo:
+- exponer operación de cola de training (metrics + DLQ + requeue) dentro de `ACS Workspace` para rol admin sin salir de la consola.
+
+Tareas:
+- [x] nuevo módulo ACS `trainingOps` en `/api/me/acs-home` con gating por `admin.training.manage`.
+- [x] tab `Training Ops` en workspace con panel de métricas y alertas de cola.
+- [x] listado DLQ con acciones `requeue` individual y `requeue-batch`.
+- [x] refresh de métricas/DLQ integrado y sincronización con lista de training jobs.
+- [x] test frontend actualizado con markers del módulo.
+
 ## Criterios de salida de Fase 7
 - `npm run check` y `npm run build` en verde.
 - smoke/integration mínimos de ACS Home en verde.

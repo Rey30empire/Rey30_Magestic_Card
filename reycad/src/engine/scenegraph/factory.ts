@@ -24,12 +24,42 @@ export function createDefaultMaterials(): Record<string, MaterialDef> {
   ];
 
   const pbrPresets: MaterialDef[] = [
-    { id: "pbr_plastic_matte", name: "Plastic Matte", kind: "pbr", pbr: { metalness: 0.05, roughness: 0.85, baseColor: "#d8d8d8" } },
-    { id: "pbr_plastic_glossy", name: "Plastic Glossy", kind: "pbr", pbr: { metalness: 0.1, roughness: 0.28, baseColor: "#d6d6d6" } },
-    { id: "pbr_metal", name: "Metal", kind: "pbr", pbr: { metalness: 0.9, roughness: 0.22, baseColor: "#a7afb8" } },
-    { id: "pbr_rubber", name: "Rubber", kind: "pbr", pbr: { metalness: 0, roughness: 0.95, baseColor: "#1b1d22" } },
-    { id: "pbr_wood", name: "Wood", kind: "pbr", pbr: { metalness: 0, roughness: 0.72, baseColor: "#8f6236" } },
-    { id: "pbr_glassish", name: "Glass-ish", kind: "pbr", pbr: { metalness: 0, roughness: 0.02, baseColor: "#b8d6ed" } }
+    {
+      id: "pbr_plastic_matte",
+      name: "Plastic Matte",
+      kind: "pbr",
+      pbr: { metalness: 0.05, roughness: 0.85, baseColor: "#d8d8d8", emissiveColor: "#000000", emissiveIntensity: 0, transmission: 0, ior: 1.45 }
+    },
+    {
+      id: "pbr_plastic_glossy",
+      name: "Plastic Glossy",
+      kind: "pbr",
+      pbr: { metalness: 0.1, roughness: 0.28, baseColor: "#d6d6d6", emissiveColor: "#000000", emissiveIntensity: 0, transmission: 0, ior: 1.45 }
+    },
+    {
+      id: "pbr_metal",
+      name: "Metal",
+      kind: "pbr",
+      pbr: { metalness: 0.9, roughness: 0.22, baseColor: "#a7afb8", emissiveColor: "#000000", emissiveIntensity: 0, transmission: 0, ior: 1.45 }
+    },
+    {
+      id: "pbr_rubber",
+      name: "Rubber",
+      kind: "pbr",
+      pbr: { metalness: 0, roughness: 0.95, baseColor: "#1b1d22", emissiveColor: "#000000", emissiveIntensity: 0, transmission: 0, ior: 1.45 }
+    },
+    {
+      id: "pbr_wood",
+      name: "Wood",
+      kind: "pbr",
+      pbr: { metalness: 0, roughness: 0.72, baseColor: "#8f6236", emissiveColor: "#000000", emissiveIntensity: 0, transmission: 0, ior: 1.45 }
+    },
+    {
+      id: "pbr_glassish",
+      name: "Glass-ish",
+      kind: "pbr",
+      pbr: { metalness: 0, roughness: 0.02, baseColor: "#b8d6ed", emissiveColor: "#000000", emissiveIntensity: 0, transmission: 0.55, ior: 1.52 }
+    }
   ];
 
   const entries: MaterialDef[] = [
@@ -63,6 +93,8 @@ function primitiveDefaults(type: PrimitiveType): PrimitiveNode {
       return { ...base, params: { r: 10, h: 20, radialSegments: 32 } };
     case "text":
       return { ...base, params: { text: "R33", size: 8, height: 2, fontId: "default" } };
+    case "terrain":
+      return { ...base, params: { w: 120, d: 120, segments: 48, heightSeed: 1337, heightScale: 8 } };
     default:
       return { ...base, params: { w: 20, h: 20, d: 20 } };
   }
@@ -89,18 +121,28 @@ export function createRootNode(): GroupNode {
 export function createProject(): Project {
   const root = createRootNode();
   return {
-    version: 1,
+    version: 3,
     units: "mm",
     grid: {
       size: 400,
       snap: 1,
       angleSnap: 15
     },
+    physics: {
+      enabled: false,
+      simulate: false,
+      runtimeMode: "static",
+      backend: "auto",
+      gravity: [0, -9.81, 0],
+      floorY: 0,
+      constraints: []
+    },
     rootId: root.id,
     nodes: {
       [root.id]: root
     },
     materials: createDefaultMaterials(),
+    textures: {},
     templatesMeta: {}
   };
 }

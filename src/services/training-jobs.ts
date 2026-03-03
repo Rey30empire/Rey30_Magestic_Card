@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { UnrecoverableError } from "bullmq";
 import { all, get, run } from "../db/sqlite";
 import { isPostgresDualWriteEnabled, mirrorTrainingJob } from "../db/postgres";
+import { isSqlServerDualWriteEnabled, mirrorTrainingJobToSqlServer } from "../db/sqlserver";
 import { ClientPlatform } from "../types/platform";
 import { env } from "../config/env";
 
@@ -16,6 +18,8 @@ type TrainingJobRow = {
   platform: ClientPlatform;
   logs: string;
   error_message: string | null;
+  cancel_requested: number | null;
+  cancel_requested_at: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -27,6 +31,21 @@ type RunnerConfig = {
   simulateFailAttempts: number;
   stepDelayMs: number;
   maxRuntimeMs: number;
+  stageTimeoutMs: number;
+};
+
+type TrainingProcessMode = "local" | "queue";
+type TrainingProcessResultKind = "skipped" | "succeeded" | "cancelled" | "retryable_failed" | "terminal_failed";
+type TrainingProcessResult = {
+  kind: TrainingProcessResultKind;
+  reason?: string;
+};
+
+export type TrainingQueueAttemptInput = {
+  jobId: string;
+  attempt: number;
+  maxAttempts: number;
+  queueJobId?: string;
 };
 
 const queuedJobIds: string[] = [];
@@ -70,6 +89,28 @@ async function mirrorTrainingJobRow(row: TrainingJobRow | undefined): Promise<vo
     });
   } catch (error) {
     console.error("[postgres-mirror] training job mirror failed", { jobId: row.id, error });
+  }
+
+  try {
+    await mirrorTrainingJobToSqlServer({
+      id: row.id,
+      userId: row.user_id,
+      projectId: row.project_id,
+      agentId: row.agent_id,
+      idempotencyKey: row.idempotency_key,
+      mode: row.mode,
+      status: row.status,
+      config: parseJsonValue(row.config, {}),
+      platform: row.platform,
+      logs: parseJsonValue(row.logs, []),
+      errorMessage: row.error_message,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at
+    });
+  } catch (error) {
+    console.error("[sqlserver-mirror] training job mirror failed", { jobId: row.id, error });
   }
 }
 
@@ -139,8 +180,25 @@ function parseRunnerConfig(configRaw: string): RunnerConfig {
     maxRetries: clampInteger(config.maxRetries, 1, 0, 5),
     simulateFailAttempts: clampInteger(config.simulateFailAttempts, 0, 0, 10),
     stepDelayMs: clampInteger(config.simulateStepDelayMs, 350, 120, 5000),
-    maxRuntimeMs: clampInteger(config.maxRuntimeMs, env.TRAINING_JOB_MAX_RUNTIME_MS, 0, 120_000)
+    maxRuntimeMs: clampInteger(config.maxRuntimeMs, env.TRAINING_JOB_MAX_RUNTIME_MS, 0, 120_000),
+    stageTimeoutMs: clampInteger(config.stageTimeoutMs, env.TRAINING_STAGE_TIMEOUT_MS, 0, 120_000)
   };
+}
+
+function isTerminalStatus(status: TrainingJobRow["status"]): boolean {
+  return status === "failed" || status === "succeeded";
+}
+
+function isCancellationRequested(row: Pick<TrainingJobRow, "cancel_requested">): boolean {
+  return Number(row.cancel_requested ?? 0) > 0;
+}
+
+function sanitizeQueueAttemptNumber(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.trunc(value));
 }
 
 function enqueueJob(jobId: string): void {
@@ -162,12 +220,20 @@ export function enqueueTrainingJobForRunner(jobId: string): void {
 }
 
 export async function enqueueTrainingJobFromQueue(jobId: string): Promise<void> {
-  const row = await get<Pick<TrainingJobRow, "id" | "status">>("SELECT id, status FROM training_jobs WHERE id = ?", [jobId]);
+  const row = await get<Pick<TrainingJobRow, "id" | "status" | "cancel_requested">>(
+    "SELECT id, status, cancel_requested FROM training_jobs WHERE id = ?",
+    [jobId]
+  );
   if (!row) {
     throw new Error(`Training job not found: ${jobId}`);
   }
 
-  if (row.status === "failed" || row.status === "succeeded") {
+  if (isTerminalStatus(row.status)) {
+    return;
+  }
+
+  if (isCancellationRequested(row)) {
+    await markQueuedOrRunningCancelled(jobId, "job cancelled before local enqueue from queue");
     return;
   }
 
@@ -218,7 +284,7 @@ async function refreshJob(jobId: string): Promise<TrainingJobRow | undefined> {
 }
 
 async function mirrorTrainingJobById(jobId: string): Promise<void> {
-  if (!isPostgresDualWriteEnabled()) {
+  if (!isPostgresDualWriteEnabled() && !isSqlServerDualWriteEnabled()) {
     return;
   }
 
@@ -243,14 +309,14 @@ function abortActiveJob(jobId: string): void {
   controller.abort();
 }
 
-async function markJobTimedOut(job: TrainingJobRow, attempt: number, timeoutMs: number): Promise<void> {
-  const current = await refreshJob(job.id);
+async function markRunningJobFailed(jobId: string, logLine: string, errorMessage: string): Promise<boolean> {
+  const current = await refreshJob(jobId);
   if (!current || current.status !== "running") {
-    return;
+    return false;
   }
 
   const now = new Date().toISOString();
-  const timedOut = await run(
+  const failed = await run(
     `
       UPDATE training_jobs
       SET status = 'failed',
@@ -261,27 +327,175 @@ async function markJobTimedOut(job: TrainingJobRow, attempt: number, timeoutMs: 
       WHERE id = ?
         AND status = 'running'
     `,
-    [appendLog(current.logs, `attempt ${attempt} timed out after ${timeoutMs}ms`), "job timeout", now, now, current.id]
+    [appendLog(current.logs, logLine), errorMessage, now, now, current.id]
   );
 
-  if (timedOut.changes > 0) {
+  if (failed.changes > 0) {
     await mirrorTrainingJobById(current.id);
   }
+
+  return failed.changes > 0;
 }
 
-async function processJob(jobId: string): Promise<void> {
-  const initial = await refreshJob(jobId);
-  if (!initial) {
-    return;
+async function markQueuedOrRunningCancelled(jobId: string, logLine: string): Promise<boolean> {
+  const current = await refreshJob(jobId);
+  if (!current || isTerminalStatus(current.status)) {
+    return false;
+  }
+  const normalizedLogLine = logLine.includes("job cancelled by user") ? logLine : `${logLine} (job cancelled by user)`;
+
+  const now = new Date().toISOString();
+  const failed = await run(
+    `
+      UPDATE training_jobs
+      SET status = 'failed',
+          logs = ?,
+          error_message = 'cancelled by user',
+          cancel_requested = 1,
+          cancel_requested_at = COALESCE(cancel_requested_at, ?),
+          finished_at = ?,
+          updated_at = ?
+      WHERE id = ?
+        AND status IN ('queued', 'running')
+    `,
+    [appendLog(current.logs, normalizedLogLine), now, now, now, current.id]
+  );
+
+  if (failed.changes > 0) {
+    await mirrorTrainingJobById(current.id);
   }
 
-  if (initial.status === "failed" || initial.status === "succeeded") {
-    return;
+  return failed.changes > 0;
+}
+
+async function markRunningJobForRetry(jobId: string, attempt: number): Promise<boolean> {
+  const current = await refreshJob(jobId);
+  if (!current || current.status !== "running") {
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  const requeue = await run(
+    `
+      UPDATE training_jobs
+      SET status = 'queued',
+          logs = ?,
+          error_message = ?,
+          finished_at = NULL,
+          updated_at = ?
+      WHERE id = ?
+        AND status = 'running'
+    `,
+    [appendLog(current.logs, `attempt ${attempt} failed; retry queued`), `attempt ${attempt} failed (retry scheduled)`, now, current.id]
+  );
+
+  if (requeue.changes > 0) {
+    await mirrorTrainingJobById(current.id);
+  }
+
+  return requeue.changes > 0;
+}
+
+async function markRunningJobSucceeded(jobId: string, attempt: number): Promise<boolean> {
+  const current = await refreshJob(jobId);
+  if (!current || current.status !== "running") {
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  const succeeded = await run(
+    `
+      UPDATE training_jobs
+      SET status = 'succeeded',
+          logs = ?,
+          error_message = NULL,
+          finished_at = ?,
+          updated_at = ?
+      WHERE id = ?
+        AND status = 'running'
+    `,
+    [appendLog(current.logs, `attempt ${attempt} completed successfully`), now, now, current.id]
+  );
+
+  if (succeeded.changes > 0) {
+    await mirrorTrainingJobById(current.id);
+  }
+
+  return succeeded.changes > 0;
+}
+
+async function markRunningJobTimedOut(jobId: string, attempt: number, timeoutMs: number): Promise<boolean> {
+  return markRunningJobFailed(jobId, `attempt ${attempt} timed out after ${timeoutMs}ms`, "job timeout");
+}
+
+async function markRunningJobStageTimedOut(jobId: string, attempt: number, stage: string, timeoutMs: number): Promise<boolean> {
+  return markRunningJobFailed(jobId, `attempt ${attempt} stage '${stage}' timed out after ${timeoutMs}ms`, "stage timeout");
+}
+
+function computeStepWaitBudget(stepDelayMs: number, runtimeRemainingMs: number | null, stageTimeoutMs: number): {
+  waitMs: number;
+  timeoutKind: "runtime" | "stage" | null;
+} {
+  let waitMs = stepDelayMs;
+  let timeoutKind: "runtime" | "stage" | null = null;
+
+  if (runtimeRemainingMs !== null && runtimeRemainingMs < waitMs) {
+    waitMs = runtimeRemainingMs;
+    timeoutKind = "runtime";
+  }
+
+  if (stageTimeoutMs > 0 && stageTimeoutMs < waitMs) {
+    waitMs = stageTimeoutMs;
+    timeoutKind = "stage";
+  }
+
+  return {
+    waitMs: Math.max(1, Math.trunc(waitMs)),
+    timeoutKind
+  };
+}
+
+async function processJobInternal(input: {
+  jobId: string;
+  mode: TrainingProcessMode;
+  queueAttempt?: number;
+  queueMaxAttempts?: number;
+  queueJobId?: string;
+}): Promise<TrainingProcessResult> {
+  const initial = await refreshJob(input.jobId);
+  if (!initial) {
+    if (input.mode === "queue") {
+      return {
+        kind: "terminal_failed",
+        reason: `Training job not found: ${input.jobId}`
+      };
+    }
+    return { kind: "skipped" };
+  }
+
+  if (isTerminalStatus(initial.status)) {
+    return { kind: "skipped" };
   }
 
   const cfg = parseRunnerConfig(initial.config);
-  const attempt = countAttempts(initial.logs) + 1;
+  const attempt =
+    input.mode === "queue" ? sanitizeQueueAttemptNumber(input.queueAttempt ?? 1, 1) : countAttempts(initial.logs) + 1;
+  const queueMaxAttempts =
+    input.mode === "queue" ? sanitizeQueueAttemptNumber(input.queueMaxAttempts ?? 1, 1) : sanitizeQueueAttemptNumber(cfg.maxRetries + 1, 1);
+
+  if (isCancellationRequested(initial)) {
+    const cancelled = await markQueuedOrRunningCancelled(input.jobId, `attempt ${attempt} cancellation acknowledged before start`);
+    return cancelled
+      ? { kind: "cancelled", reason: "cancelled by user" }
+      : { kind: "skipped", reason: "job is already terminal" };
+  }
+
   const startedAt = new Date().toISOString();
+  const startMessage =
+    input.mode === "queue"
+      ? `attempt ${attempt} started (redis queue worker${input.queueJobId ? ` queueJobId=${input.queueJobId}` : ""})`
+      : `attempt ${attempt} started (simulated runner)`;
+
   const toRunning = await run(
     `
       UPDATE training_jobs
@@ -294,125 +508,132 @@ async function processJob(jobId: string): Promise<void> {
       WHERE id = ?
         AND status IN ('queued', 'running')
     `,
-    [appendLog(initial.logs, `attempt ${attempt} started (simulated runner)`), startedAt, startedAt, jobId]
+    [appendLog(initial.logs, startMessage), startedAt, startedAt, input.jobId]
   );
 
   if (toRunning.changes === 0) {
-    return;
+    return { kind: "skipped" };
   }
 
-  const abortController = createJobAbortController(jobId);
+  const abortController = createJobAbortController(input.jobId);
   const startedAtMs = Date.now();
-  const deadlineMs = cfg.maxRuntimeMs > 0 ? startedAtMs + cfg.maxRuntimeMs : null;
+  const runtimeDeadlineMs = cfg.maxRuntimeMs > 0 ? startedAtMs + cfg.maxRuntimeMs : null;
 
-  await mirrorTrainingJobById(jobId);
+  await mirrorTrainingJobById(input.jobId);
 
   try {
     const steps = ["prepare inputs", "run training step", "evaluate outputs"];
     for (const step of steps) {
-      const remainingMs = deadlineMs === null ? null : deadlineMs - Date.now();
-      if (remainingMs !== null && remainingMs <= 0) {
-        await markJobTimedOut(initial, attempt, cfg.maxRuntimeMs);
-        return;
+      const runtimeRemainingMs = runtimeDeadlineMs === null ? null : runtimeDeadlineMs - Date.now();
+      if (runtimeRemainingMs !== null && runtimeRemainingMs <= 0) {
+        await markRunningJobTimedOut(input.jobId, attempt, cfg.maxRuntimeMs);
+        return { kind: "terminal_failed", reason: "job timeout" };
       }
 
-      const waitMs = remainingMs === null ? cfg.stepDelayMs : Math.max(1, Math.min(cfg.stepDelayMs, remainingMs));
-      const sleepResult = await sleepWithSignal(waitMs, abortController.signal);
+      const budget = computeStepWaitBudget(cfg.stepDelayMs, runtimeRemainingMs, cfg.stageTimeoutMs);
+      const sleepResult = await sleepWithSignal(budget.waitMs, abortController.signal);
       if (sleepResult === "aborted") {
-        return;
+        const current = await refreshJob(input.jobId);
+        if (!current || isTerminalStatus(current.status)) {
+          return { kind: "skipped" };
+        }
+
+        if (isCancellationRequested(current)) {
+          await markQueuedOrRunningCancelled(input.jobId, `attempt ${attempt} cancellation acknowledged`);
+          return { kind: "cancelled", reason: "cancelled by user" };
+        }
+
+        return { kind: "skipped", reason: "job aborted" };
       }
 
-      const row = await refreshJob(jobId);
-      if (!row || row.status === "failed" || row.status === "succeeded") {
-        return;
+      const row = await refreshJob(input.jobId);
+      if (!row || isTerminalStatus(row.status)) {
+        return { kind: "skipped" };
       }
 
-      if (deadlineMs !== null && Date.now() >= deadlineMs) {
-        await markJobTimedOut(row, attempt, cfg.maxRuntimeMs);
-        return;
+      if (isCancellationRequested(row)) {
+        await markQueuedOrRunningCancelled(input.jobId, `attempt ${attempt} cancellation acknowledged`);
+        return { kind: "cancelled", reason: "cancelled by user" };
+      }
+
+      if (budget.timeoutKind === "runtime") {
+        await markRunningJobTimedOut(input.jobId, attempt, cfg.maxRuntimeMs);
+        return { kind: "terminal_failed", reason: "job timeout" };
+      }
+
+      if (budget.timeoutKind === "stage") {
+        await markRunningJobStageTimedOut(input.jobId, attempt, step, cfg.stageTimeoutMs);
+        return { kind: "terminal_failed", reason: "stage timeout" };
       }
 
       await appendJobLog(row, `attempt ${attempt}: ${step}`);
     }
 
-    const current = await refreshJob(jobId);
-    if (!current || current.status === "failed" || current.status === "succeeded") {
-      return;
+    const current = await refreshJob(input.jobId);
+    if (!current || isTerminalStatus(current.status)) {
+      return { kind: "skipped" };
     }
 
-    if (deadlineMs !== null && Date.now() >= deadlineMs) {
-      await markJobTimedOut(current, attempt, cfg.maxRuntimeMs);
-      return;
+    if (isCancellationRequested(current)) {
+      await markQueuedOrRunningCancelled(input.jobId, `attempt ${attempt} cancellation acknowledged`);
+      return { kind: "cancelled", reason: "cancelled by user" };
+    }
+
+    if (runtimeDeadlineMs !== null && Date.now() >= runtimeDeadlineMs) {
+      await markRunningJobTimedOut(input.jobId, attempt, cfg.maxRuntimeMs);
+      return { kind: "terminal_failed", reason: "job timeout" };
     }
 
     const failedBySimulation = attempt <= cfg.simulateFailAttempts;
-    const now = new Date().toISOString();
-
     if (failedBySimulation) {
-      const canRetry = attempt <= cfg.maxRetries;
+      const canRetryByConfig = attempt <= cfg.maxRetries;
+      const canRetryByQueueBudget = input.mode === "queue" ? attempt < queueMaxAttempts : true;
+      const canRetry = canRetryByConfig && canRetryByQueueBudget;
+
       if (canRetry) {
-        const requeue = await run(
-          `
-            UPDATE training_jobs
-            SET status = 'queued',
-                logs = ?,
-                error_message = ?,
-                finished_at = NULL,
-                updated_at = ?
-            WHERE id = ?
-              AND status = 'running'
-          `,
-          [appendLog(current.logs, `attempt ${attempt} failed; retry queued`), `attempt ${attempt} failed (retry scheduled)`, now, jobId]
-        );
-
-        if (requeue.changes > 0) {
-          await mirrorTrainingJobById(jobId);
-          enqueueTrainingJobForRunner(jobId);
+        const requeued = await markRunningJobForRetry(input.jobId, attempt);
+        if (requeued && input.mode === "local") {
+          enqueueTrainingJobForRunner(input.jobId);
         }
-
-        return;
+        return {
+          kind: "retryable_failed",
+          reason: `attempt ${attempt} failed (retry scheduled)`
+        };
       }
 
-      const toFailed = await run(
-        `
-          UPDATE training_jobs
-          SET status = 'failed',
-              logs = ?,
-              error_message = ?,
-              finished_at = ?,
-              updated_at = ?
-          WHERE id = ?
-            AND status = 'running'
-        `,
-        [appendLog(current.logs, `attempt ${attempt} failed permanently`), "simulated failure", now, now, jobId]
-      );
-
-      if (toFailed.changes > 0) {
-        await mirrorTrainingJobById(jobId);
-      }
-
-      return;
+      await markRunningJobFailed(input.jobId, `attempt ${attempt} failed permanently`, "simulated failure");
+      return { kind: "terminal_failed", reason: "simulated failure" };
     }
 
-    const toSucceeded = await run(
-      `
-        UPDATE training_jobs
-        SET status = 'succeeded',
-            logs = ?,
-            error_message = NULL,
-            finished_at = ?,
-            updated_at = ?
-        WHERE id = ?
-          AND status = 'running'
-      `,
-      [appendLog(current.logs, `attempt ${attempt} completed successfully`), now, now, jobId]
-    );
-
-    if (toSucceeded.changes > 0) {
-      await mirrorTrainingJobById(jobId);
-    }
+    await markRunningJobSucceeded(input.jobId, attempt);
+    return { kind: "succeeded" };
   } finally {
-    clearJobAbortController(jobId);
+    clearJobAbortController(input.jobId);
+  }
+}
+
+async function processJob(jobId: string): Promise<void> {
+  await processJobInternal({
+    jobId,
+    mode: "local"
+  });
+}
+
+export async function processTrainingJobQueueAttempt(input: TrainingQueueAttemptInput): Promise<void> {
+  const result = await processJobInternal({
+    jobId: input.jobId,
+    mode: "queue",
+    queueAttempt: input.attempt,
+    queueMaxAttempts: input.maxAttempts,
+    queueJobId: input.queueJobId
+  });
+
+  if (result.kind === "retryable_failed") {
+    throw new Error(result.reason ?? `Training queue attempt should retry: ${input.jobId}`);
+  }
+
+  if (result.kind === "terminal_failed") {
+    throw new UnrecoverableError(result.reason ?? `Training queue attempt failed: ${input.jobId}`);
   }
 }
 
@@ -459,6 +680,13 @@ async function bootstrapQueueFromDatabase(): Promise<void> {
   );
 
   for (const row of recoverable) {
+    if (isCancellationRequested(row)) {
+      const cancelled = await markQueuedOrRunningCancelled(row.id, "job recovered after restart and marked cancelled");
+      if (cancelled) {
+        continue;
+      }
+    }
+
     if (row.status === "running") {
       const now = new Date().toISOString();
       const recovery = await run(
@@ -564,9 +792,9 @@ export async function createTrainingJob(input: {
       `
         INSERT INTO training_jobs (
           id, user_id, project_id, agent_id, idempotency_key, mode, status, config, platform, logs,
-          error_message, created_at, updated_at, started_at, finished_at
+          error_message, cancel_requested, cancel_requested_at, created_at, updated_at, started_at, finished_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, NULL, ?, ?, NULL, NULL)
+        VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, NULL, 0, NULL, ?, ?, NULL, NULL)
       `,
       [
         id,
@@ -714,32 +942,58 @@ export async function cancelTrainingJob(userId: string, jobId: string): Promise<
     return false;
   }
 
-  if (row.status === "failed" || row.status === "succeeded") {
+  if (isTerminalStatus(row.status)) {
     return true;
   }
 
   dequeueJob(jobId);
-  abortActiveJob(jobId);
-
   const cancelledAt = new Date().toISOString();
-  const cancellation = await run(
-    `
-      UPDATE training_jobs
-      SET status = 'failed',
-          error_message = 'cancelled by user',
-          logs = ?,
-          finished_at = ?,
-          updated_at = ?
-      WHERE id = ? AND user_id = ?
-        AND status IN ('queued', 'running')
-    `,
-    [appendLog(row.logs, "job cancelled by user"), cancelledAt, cancelledAt, jobId, userId]
-  );
+  let cancellationChanges = 0;
 
-  if (cancellation.changes > 0) {
+  if (row.status === "queued") {
+    const queuedCurrent = await refreshJob(jobId);
+    const queuedLogs = queuedCurrent ? queuedCurrent.logs : row.logs;
+    const queuedCancellation = await run(
+      `
+        UPDATE training_jobs
+        SET status = 'failed',
+            error_message = 'cancelled by user',
+            logs = ?,
+            cancel_requested = 1,
+            cancel_requested_at = COALESCE(cancel_requested_at, ?),
+            finished_at = ?,
+            updated_at = ?
+        WHERE id = ? AND user_id = ?
+          AND status = 'queued'
+      `,
+      [appendLog(queuedLogs, "job cancelled by user"), cancelledAt, cancelledAt, cancelledAt, jobId, userId]
+    );
+    cancellationChanges = queuedCancellation.changes;
+  }
+
+  if (cancellationChanges === 0) {
+    const runningCurrent = await refreshJob(jobId);
+    const runningLogs = runningCurrent ? runningCurrent.logs : row.logs;
+    const runningCancellation = await run(
+      `
+        UPDATE training_jobs
+        SET cancel_requested = 1,
+            cancel_requested_at = COALESCE(cancel_requested_at, ?),
+            logs = ?,
+            updated_at = ?
+        WHERE id = ? AND user_id = ?
+          AND status = 'running'
+      `,
+      [cancelledAt, appendLog(runningLogs, "cancellation requested by user"), cancelledAt, jobId, userId]
+    );
+    cancellationChanges = runningCancellation.changes;
+  }
+
+  if (cancellationChanges > 0) {
     await mirrorTrainingJobById(jobId);
   }
 
+  abortActiveJob(jobId);
   return true;
 }
 
@@ -761,12 +1015,35 @@ export async function prepareTrainingJobForRequeue(jobId: string, reason = "job 
   }
 
   if (row.status === "queued") {
+    let updated = false;
+    if (isCancellationRequested(row)) {
+      const now = new Date().toISOString();
+      const cleared = await run(
+        `
+          UPDATE training_jobs
+          SET logs = ?,
+              error_message = NULL,
+              cancel_requested = 0,
+              cancel_requested_at = NULL,
+              updated_at = ?
+          WHERE id = ?
+            AND status = 'queued'
+        `,
+        [appendLog(row.logs, reason), now, jobId]
+      );
+
+      if (cleared.changes > 0) {
+        updated = true;
+        await mirrorTrainingJobById(jobId);
+      }
+    }
+
     enqueueTrainingJobForRunner(jobId);
     return {
       jobId,
       statusBefore: row.status,
       statusAfter: row.status,
-      updated: false
+      updated
     };
   }
 
@@ -777,6 +1054,8 @@ export async function prepareTrainingJobForRequeue(jobId: string, reason = "job 
       SET status = 'queued',
           logs = ?,
           error_message = NULL,
+          cancel_requested = 0,
+          cancel_requested_at = NULL,
           started_at = NULL,
           finished_at = NULL,
           updated_at = ?
@@ -836,6 +1115,8 @@ export function mapTrainingJob(row: TrainingJobRow): Record<string, unknown> {
     })(),
     logs,
     errorMessage: row.error_message,
+    cancelRequested: isCancellationRequested(row),
+    cancelRequestedAt: row.cancel_requested_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     startedAt: row.started_at,

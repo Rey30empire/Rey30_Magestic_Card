@@ -169,7 +169,7 @@ export function duplicateCommand(nodeIds: string[]): Command {
     }
 
     if (clone.type === "group") {
-      const sourceChildren = [...sourceNode.children];
+      const sourceChildren = sourceNode.type === "group" ? [...sourceNode.children] : [];
       clone.children = [];
       draft.project.nodes[clone.id] = clone;
       clonedNodeIds.add(clone.id);

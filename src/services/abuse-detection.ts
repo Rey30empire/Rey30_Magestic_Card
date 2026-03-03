@@ -480,7 +480,7 @@ export async function getAbuseSecuritySummary(windowMinutes = 60): Promise<{
       FROM abuse_risk_events e
       LEFT JOIN users u ON u.id = e.user_id
       WHERE e.created_at >= ?
-      GROUP BY e.user_id
+      GROUP BY e.user_id, u.username
       ORDER BY score DESC, last_event_at DESC
       LIMIT 10
     `,

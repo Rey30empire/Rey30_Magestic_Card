@@ -26,6 +26,23 @@ const TOOL_PERMISSION_REQUIREMENTS: Record<AiToolCall["tool"], AiPermissionKey[]
   assign_agent_skills: ["skills"],
   frame: ["grid"],
   set_grid: ["grid"],
+  set_rigidbody: ["engineControl"],
+  set_collider: ["engineControl"],
+  set_physics_world: ["engineControl"],
+  add_constraint: ["engineControl"],
+  update_constraint: ["engineControl"],
+  remove_constraint: ["engineControl"],
+  list_constraints: ["engineControl"],
+  raycast_physics: ["engineControl"],
+  get_physics_events: ["engineControl"],
+  clear_physics_events: ["engineControl"],
+  setup_battle_scene: ["engineControl"],
+  play_battle_clash: ["engineControl"],
+  stop_battle_scene: ["engineControl"],
+  apply_impulse: ["engineControl"],
+  set_quality: ["engineControl"],
+  get_engine_status: ["engineControl"],
+  generate_terrain: ["createGeometry"],
   export_stl: ["export"],
   export_glb: ["export"]
 };
@@ -42,7 +59,8 @@ export const AI_PERMISSION_DEFINITIONS: Array<{ key: AiPermissionKey; label: str
   { key: "agents", label: "Agents", description: "Permite crear agentes y asignar herramientas." },
   { key: "skills", label: "Skills", description: "Permite asignar skills a agentes." },
   { key: "grid", label: "Grid/Frame", description: "Permite set_grid y frame de cámara." },
-  { key: "export", label: "Export", description: "Permite exportar STL/GLB desde tools AI." }
+  { key: "export", label: "Export", description: "Permite exportar STL/GLB desde tools AI." },
+  { key: "engineControl", label: "Engine Control", description: "Permite estado/calidad del motor y configuración de física." }
 ];
 
 export function createDefaultAiPermissions(): AiPermissions {
@@ -58,7 +76,8 @@ export function createDefaultAiPermissions(): AiPermissions {
     agents: false,
     skills: false,
     grid: false,
-    export: false
+    export: false,
+    engineControl: false
   };
 }
 

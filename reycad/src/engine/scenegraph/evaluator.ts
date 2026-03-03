@@ -1,15 +1,20 @@
-import type { GroupNode, Node, PrimitiveNode, Project, Transform } from "./types";
+import type { GroupNode, Node, PrimitiveParams, PrimitiveType, PrimitiveNode, Project, Transform } from "./types";
 import { evaluateCsgPipeline } from "./csgPipeline";
 import type { BooleanOp } from "./types";
 
-export type RenderPrimitive = {
+type RenderPrimitiveBase = {
   nodeId: string;
-  primitive: PrimitiveNode["primitive"];
-  params: PrimitiveNode["params"];
   materialId?: string;
   transform: Transform;
   mode: "solid" | "hole";
 };
+
+export type RenderPrimitive = {
+  [K in PrimitiveType]: RenderPrimitiveBase & {
+    primitive: K;
+    params: PrimitiveParams[K];
+  };
+}[PrimitiveType];
 
 export type RenderScene = {
   items: RenderPrimitive[];
@@ -61,7 +66,7 @@ function collectNodes(
       materialId: node.materialId,
       transform: world,
       mode: effectiveMode
-    });
+    } as RenderPrimitive);
     return;
   }
 

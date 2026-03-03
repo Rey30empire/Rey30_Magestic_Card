@@ -21,5 +21,8 @@ export function parseSimpleDsl(input: string): ParsedDslCommand {
   if (normalized.includes("text")) {
     return { kind: "create", primitive: "text" };
   }
+  if (normalized.includes("terrain") || normalized.includes("terreno")) {
+    return { kind: "create", primitive: "terrain" };
+  }
   return { kind: "unknown" };
 }
