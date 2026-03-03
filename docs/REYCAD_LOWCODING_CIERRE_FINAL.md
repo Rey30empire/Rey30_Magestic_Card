@@ -39,3 +39,4 @@
   - static batching para escenas densas en quality `low/medium`.
   - metricas extendidas de render (`staticBatchGroups/staticBatchMeshes`).
   - metricas de assets en `PerformancePanel` (manifest/cache, loads, hits/misses, memoria).
+  - `engineApi.generateBenchmarkScene(preset)` + panel de benchmark para pruebas reproducibles de rendimiento.

@@ -54,7 +54,7 @@ Fecha de corte: 2026-03-03
 - No tomado en cuenta: streaming multi-nivel por chunks de mundo abierto y cache distribuido entre escenas.
 
 ### Fase 6 - Optimizacion GPU/CPU
-- Hecho: `QualityManager` (auto/manual), CSG en worker, chunks de build ReyCAD, instancing dinamico, culling+LOD runtime y static batching para escenas densas (quality low/medium) con metricas live en `PerformancePanel`.
+- Hecho: `QualityManager` (auto/manual), CSG en worker, chunks de build ReyCAD, instancing dinamico, culling+LOD runtime, static batching para escenas densas (quality low/medium), metricas live en `PerformancePanel` y escena benchmark reproducible por preset.
 - Documentado para hacer: mas hardening de rendimiento en fases de producto.
 - No tomado en cuenta: job system de render multihilo y budget scheduler CPU/GPU por subsistema.
 

@@ -49,6 +49,9 @@ export default function PerformancePanel(): JSX.Element {
   const [reymeshyBatchBusy, setReymeshyBatchBusy] = useState(false);
   const [reymeshyBatchResult, setReymeshyBatchResult] = useState("Sin ejecucion en lote.");
   const [reymeshyBatchFailures, setReymeshyBatchFailures] = useState<string[]>([]);
+  const [benchmarkPreset, setBenchmarkPreset] = useState<"indoor" | "outdoor" | "large-world">("outdoor");
+  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [benchmarkResult, setBenchmarkResult] = useState("Sin benchmark generado.");
 
   const bodyNodes = useMemo(
     () =>
@@ -117,6 +120,22 @@ export default function PerformancePanel(): JSX.Element {
     }
   }
 
+  function generateBenchmarkScene(): void {
+    if (benchmarkBusy) {
+      return;
+    }
+    setBenchmarkBusy(true);
+    try {
+      const result = engineApi.generateBenchmarkScene(benchmarkPreset);
+      setBenchmarkResult(`Benchmark ${result.preset}: ${result.nodeCount} nodos.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setBenchmarkResult(`Error benchmark: ${message}`);
+    } finally {
+      setBenchmarkBusy(false);
+    }
+  }
+
   return (
     <div className="panel stack-sm">
       <div className="panel-head">
@@ -180,6 +199,29 @@ export default function PerformancePanel(): JSX.Element {
       <button className="btn" onClick={() => resetMetrics()} type="button">
         Reset Metrics
       </button>
+
+      <div className="perm-card stack-sm">
+        <div className="panel-head">
+          <h4>Benchmark Scene</h4>
+          <span className="pill">runtime</span>
+        </div>
+        <label className="field">
+          <span>Preset</span>
+          <select
+            className="input"
+            value={benchmarkPreset}
+            onChange={(event) => setBenchmarkPreset(event.target.value as "indoor" | "outdoor" | "large-world")}
+          >
+            <option value="indoor">indoor</option>
+            <option value="outdoor">outdoor</option>
+            <option value="large-world">large-world</option>
+          </select>
+        </label>
+        <button className="btn btn-primary" disabled={benchmarkBusy} onClick={() => generateBenchmarkScene()} type="button">
+          {benchmarkBusy ? "Generating..." : "Generate Benchmark Scene"}
+        </button>
+        <span className="mono">{benchmarkResult}</span>
+      </div>
 
       <div className="perm-card stack-sm">
         <div className="panel-head">

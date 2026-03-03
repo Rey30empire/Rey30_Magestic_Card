@@ -281,6 +281,24 @@ test("engineApi generateArena creates arena scaffold and static runtime mode", (
   assert.equal(snapshot.physics.runtimeMode, "static");
 });
 
+test("engineApi generateBenchmarkScene clears scene and creates reproducible dense preset", () => {
+  useEditorStore.getState().loadProject(createProject());
+  const staleNodeId = engineApi.createPrimitive("box");
+
+  const summary = engineApi.generateBenchmarkScene("outdoor");
+  const snapshot = engineApi.getProjectSnapshot();
+  const benchmarkGroup = snapshot.nodes[summary.groupId];
+
+  assert.equal(summary.preset, "outdoor");
+  assert.ok(summary.nodeCount >= 140, `expected dense benchmark node count, got ${summary.nodeCount}`);
+  assert.equal(snapshot.nodes[staleNodeId], undefined, "expected previous scene node to be cleared");
+  assert.ok(benchmarkGroup);
+  assert.equal(benchmarkGroup.type, "group");
+  assert.equal(snapshot.physics.enabled, true);
+  assert.equal(snapshot.physics.simulate, false);
+  assert.equal(snapshot.physics.runtimeMode, "static");
+});
+
 test("engineApi applyTextureToSelection assigns uploaded texture map to selected node", () => {
   useEditorStore.getState().loadProject(createProject());
   const nodeId = engineApi.createPrimitive("box");

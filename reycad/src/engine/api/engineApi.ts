@@ -121,6 +121,13 @@ type MaterialPatch = Omit<Partial<MaterialDef>, "pbr"> & {
   pbr?: Partial<NonNullable<MaterialDef["pbr"]>>;
 };
 
+export type BenchmarkScenePreset = "indoor" | "outdoor" | "large-world";
+export type BenchmarkSceneSummary = {
+  preset: BenchmarkScenePreset;
+  groupId: string;
+  nodeCount: number;
+};
+
 export interface EngineAPI {
   createPrimitive: (type: PrimitiveType, params?: Partial<Record<string, unknown>>, transform?: Partial<Transform>, materialId?: string) => string;
   createGroup: (childrenIds: string[], mode: "solid" | "hole" | "mixed") => string;
@@ -173,6 +180,7 @@ export interface EngineAPI {
   applyPatternToSelection: (pattern: "stripes" | "camo" | "pulse") => number;
   saveSelectionVariant: (name: string) => Promise<string>;
   generateArena: () => string;
+  generateBenchmarkScene: (preset?: BenchmarkScenePreset) => BenchmarkSceneSummary;
   setupBattleScene: () => { arenaId: string; actorAId: string; actorBId: string };
   playBattleClash: (impulse?: number) => boolean;
   stopBattleScene: () => void;
@@ -1702,6 +1710,126 @@ export const engineApi: EngineAPI = {
     engineApi.frameSelection([arenaGroupId]);
     useEditorStore.getState().addLog("[arena] generated arena preset");
     return arenaGroupId;
+  },
+
+  generateBenchmarkScene(preset = "outdoor") {
+    const state = useEditorStore.getState();
+    const root = state.data.project.nodes[state.data.project.rootId];
+    if (root && root.type === "group" && root.children.length > 0) {
+      state.executeCommand(deleteNodesCommand([...root.children]));
+    }
+    battleSceneState = null;
+
+    const presets: Record<
+      BenchmarkScenePreset,
+      {
+        rows: number;
+        cols: number;
+        spacing: number;
+        floorSize: number;
+      }
+    > = {
+      indoor: { rows: 8, cols: 8, spacing: 18, floorSize: 220 },
+      outdoor: { rows: 12, cols: 12, spacing: 26, floorSize: 420 },
+      "large-world": { rows: 18, cols: 18, spacing: 32, floorSize: 820 }
+    };
+    const selectedPreset: BenchmarkScenePreset = preset in presets ? preset : "outdoor";
+    const config = presets[selectedPreset];
+
+    const nodeIds: string[] = [];
+    const floorId = engineApi.createPrimitive(
+      "terrain",
+      {
+        w: config.floorSize,
+        d: config.floorSize,
+        segments: Math.min(64, 24 + config.rows),
+        heightSeed: 1444,
+        heightScale: selectedPreset === "indoor" ? 0.4 : selectedPreset === "outdoor" ? 1.2 : 2.8
+      },
+      { position: [0, -6, 0] },
+      "solid_sand"
+    );
+    nodeIds.push(floorId);
+
+    const primitiveCycle: PrimitiveType[] = ["box", "cylinder", "sphere", "cone"];
+    const materialCycle = ["pbr_metal", "pbr_plastic_matte", "pbr_wood", "solid_steel"];
+    const offsetX = ((config.cols - 1) * config.spacing) / 2;
+    const offsetZ = ((config.rows - 1) * config.spacing) / 2;
+
+    for (let row = 0; row < config.rows; row += 1) {
+      for (let col = 0; col < config.cols; col += 1) {
+        const index = row * config.cols + col;
+        const primitive = primitiveCycle[index % primitiveCycle.length];
+        const x = col * config.spacing - offsetX;
+        const z = row * config.spacing - offsetZ;
+        const wave = Math.sin(row * 0.45) * Math.cos(col * 0.33);
+        const y = 8 + wave * (selectedPreset === "large-world" ? 4 : 2.2);
+        const materialId = materialCycle[index % materialCycle.length];
+
+        if (primitive === "box") {
+          nodeIds.push(
+            engineApi.createPrimitive(
+              "box",
+              { w: 10 + (index % 4) * 2, h: 10 + (index % 5), d: 10 + (index % 3) * 3 },
+              { position: [x, y, z] },
+              materialId
+            )
+          );
+          continue;
+        }
+        if (primitive === "cylinder") {
+          nodeIds.push(
+            engineApi.createPrimitive(
+              "cylinder",
+              {
+                rTop: 4 + (index % 3),
+                rBottom: 4 + ((index + 1) % 3),
+                h: 12 + (index % 6),
+                radialSegments: 18
+              },
+              { position: [x, y, z] },
+              materialId
+            )
+          );
+          continue;
+        }
+        if (primitive === "sphere") {
+          nodeIds.push(
+            engineApi.createPrimitive(
+              "sphere",
+              { r: 6 + (index % 4), widthSegments: 18, heightSegments: 14 },
+              { position: [x, y + 1.4, z] },
+              materialId
+            )
+          );
+          continue;
+        }
+
+        nodeIds.push(
+          engineApi.createPrimitive(
+            "cone",
+            { r: 6 + (index % 3), h: 12 + (index % 5), radialSegments: 18 },
+            { position: [x, y, z] },
+            materialId
+          )
+        );
+      }
+    }
+
+    const groupId = engineApi.createGroup(nodeIds, "mixed");
+    engineApi.setPhysicsSettings({
+      enabled: true,
+      simulate: false,
+      runtimeMode: "static",
+      floorY: -4
+    });
+    engineApi.frameSelection([groupId]);
+    useEditorStore.getState().addLog(`[benchmark] preset=${selectedPreset} nodes=${nodeIds.length}`);
+    return {
+      preset: selectedPreset,
+      groupId,
+      nodeCount: nodeIds.length
+    };
   },
 
   setupBattleScene() {
