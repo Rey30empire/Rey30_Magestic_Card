@@ -3,6 +3,7 @@ import { Canvas, type ThreeEvent, useFrame, useThree } from "@react-three/fiber"
 import { OrbitControls, TransformControls } from "@react-three/drei";
 import { BufferGeometry, Frustum, InstancedMesh, Matrix4, Mesh, Object3D, PerspectiveCamera, Sphere, Vector3 } from "three";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { useEditorStore } from "../../editor/state/editorStore";
 import { useQualityStore } from "../runtime/qualityStore";
 import { physicsRuntime } from "../runtime/physicsRuntime";
@@ -12,6 +13,7 @@ import { clamp, computeSceneRuntimeProfile, primitiveScaleRadius, resolveLodLeve
 import { buildThreeMaterial } from "./materials";
 import { SceneLighting } from "./lighting";
 import { SceneGrid } from "./grid";
+import { runtimeAssetManager } from "../runtime/assetManager";
 import { applySelectionRules } from "../interaction/selection";
 import { modeFromKeyboardKey } from "../interaction/gizmo";
 import { frameBounds } from "../interaction/camera";
@@ -20,6 +22,7 @@ import { deleteNodesCommand, updateTransformCommand } from "../../editor/command
 import { duplicateCommand } from "../../editor/commands/advancedCommands";
 import { executeCsgTasks } from "../../editor/workers/csgClient";
 import type { CsgSolvedMesh } from "../scenegraph/csgSolve";
+import type { MaterialDef } from "../scenegraph/types";
 
 (BufferGeometry.prototype as BufferGeometry & { computeBoundsTree?: () => void; disposeBoundsTree?: () => void }).computeBoundsTree = computeBoundsTree;
 (BufferGeometry.prototype as BufferGeometry & { computeBoundsTree?: () => void; disposeBoundsTree?: () => void }).disposeBoundsTree =
@@ -31,6 +34,16 @@ type InstancedGroup = {
   prototype: RenderPrimitive;
   items: RenderPrimitive[];
   nodeIds: string[];
+};
+
+type StaticBatchGroup = {
+  key: string;
+  materialId: string | undefined;
+  itemCount: number;
+  itemIds: string[];
+  items: RenderPrimitive[];
+  geometry: BufferGeometry;
+  lodLevel: GeometryLodLevel;
 };
 
 function canUseInstancing(item: RenderPrimitive): boolean {
@@ -130,6 +143,176 @@ function computeInstancedGroupBounds(groups: InstancedGroup[]): Map<string, { ce
   return out;
 }
 
+function collectMaterialTextureIds(material: MaterialDef | undefined): string[] {
+  if (!material || material.kind !== "pbr") {
+    return [];
+  }
+  const pbr = material.pbr;
+  if (!pbr) {
+    return [];
+  }
+
+  const textureIds = [
+    pbr.baseColorMapId,
+    pbr.normalMapId,
+    pbr.aoMapId,
+    pbr.roughnessMapId,
+    pbr.metalnessMapId,
+    pbr.emissiveMapId
+  ];
+  return textureIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+function resolveStaticBatchLod(level: "low" | "medium" | "high" | "ultra"): GeometryLodLevel {
+  if (level === "low") {
+    return "low";
+  }
+  if (level === "medium") {
+    return "medium";
+  }
+  return "high";
+}
+
+function buildStaticBatchPlan(
+  directItems: RenderPrimitive[],
+  nodeRigidBodyEnabled: Record<string, boolean>,
+  selection: string[],
+  hoveredNodeId: string | null,
+  effectiveLevel: "low" | "medium" | "high" | "ultra"
+): { directItems: RenderPrimitive[]; staticBatchGroups: StaticBatchGroup[] } {
+  const allowBatching = (effectiveLevel === "low" || effectiveLevel === "medium") && directItems.length >= 120;
+  if (!allowBatching) {
+    return {
+      directItems,
+      staticBatchGroups: []
+    };
+  }
+
+  const selectionSet = new Set(selection);
+  const byMaterial = new Map<string, RenderPrimitive[]>();
+  const passthrough: RenderPrimitive[] = [];
+
+  for (const item of directItems) {
+    const isSelectable = selectionSet.has(item.nodeId) || item.nodeId === hoveredNodeId;
+    const isStaticBody = !nodeRigidBodyEnabled[item.nodeId];
+    const canBatchPrimitive =
+      item.mode === "solid" &&
+      isStaticBody &&
+      !isSelectable &&
+      (item.primitive === "box" || item.primitive === "cylinder" || item.primitive === "sphere" || item.primitive === "cone");
+
+    if (!canBatchPrimitive) {
+      passthrough.push(item);
+      continue;
+    }
+
+    const key = item.materialId ?? "default";
+    const bucket = byMaterial.get(key);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      byMaterial.set(key, [item]);
+    }
+  }
+
+  const staticBatchGroups: StaticBatchGroup[] = [];
+  const dummy = new Object3D();
+  const lodLevel = resolveStaticBatchLod(effectiveLevel);
+  let batchIndex = 0;
+
+  for (const [materialKey, bucket] of byMaterial.entries()) {
+    if (bucket.length < 3) {
+      passthrough.push(...bucket);
+      continue;
+    }
+
+    const chunkSize = 96;
+    for (let start = 0; start < bucket.length; start += chunkSize) {
+      const chunk = bucket.slice(start, Math.min(start + chunkSize, bucket.length));
+      if (chunk.length < 3) {
+        passthrough.push(...chunk);
+        continue;
+      }
+
+      const geometries: BufferGeometry[] = [];
+      for (const item of chunk) {
+        const geometry = buildGeometryFromPrimitive(item, lodLevel).clone();
+        dummy.position.set(item.transform.position[0], item.transform.position[1], item.transform.position[2]);
+        dummy.rotation.set(item.transform.rotation[0], item.transform.rotation[1], item.transform.rotation[2]);
+        dummy.scale.set(item.transform.scale[0], item.transform.scale[1], item.transform.scale[2]);
+        dummy.updateMatrix();
+        geometry.applyMatrix4(dummy.matrix);
+        geometries.push(geometry);
+      }
+
+      const merged = mergeGeometries(geometries, false);
+      for (const geometry of geometries) {
+        geometry.dispose();
+      }
+
+      if (!merged) {
+        passthrough.push(...chunk);
+        continue;
+      }
+
+      merged.computeBoundingSphere();
+      staticBatchGroups.push({
+        key: `sb:${materialKey}:${batchIndex}`,
+        materialId: materialKey === "default" ? undefined : materialKey,
+        itemCount: chunk.length,
+        itemIds: chunk.map((item) => item.nodeId),
+        items: chunk,
+        geometry: merged,
+        lodLevel
+      });
+      batchIndex += 1;
+    }
+  }
+
+  return {
+    directItems: passthrough,
+    staticBatchGroups
+  };
+}
+
+function computeStaticBatchBounds(groups: StaticBatchGroup[]): Map<string, { center: [number, number, number]; radius: number }> {
+  const out = new Map<string, { center: [number, number, number]; radius: number }>();
+
+  for (const group of groups) {
+    if (group.items.length === 0) {
+      continue;
+    }
+    let sumX = 0;
+    let sumY = 0;
+    let sumZ = 0;
+    for (const item of group.items) {
+      sumX += item.transform.position[0];
+      sumY += item.transform.position[1];
+      sumZ += item.transform.position[2];
+    }
+
+    const cx = sumX / group.items.length;
+    const cy = sumY / group.items.length;
+    const cz = sumZ / group.items.length;
+
+    let radius = 0;
+    for (const item of group.items) {
+      const dx = item.transform.position[0] - cx;
+      const dy = item.transform.position[1] - cy;
+      const dz = item.transform.position[2] - cz;
+      const distance = Math.hypot(dx, dy, dz);
+      radius = Math.max(radius, distance + primitiveScaleRadius(item));
+    }
+
+    out.set(group.key, {
+      center: [cx, cy, cz],
+      radius: Math.max(radius, 1)
+    });
+  }
+
+  return out;
+}
+
 function FramePerformanceProbe(): null {
   const ingestFrameMs = useQualityStore((state) => state.ingestFrameMs);
   useFrame((_state, delta) => {
@@ -154,16 +337,29 @@ function SceneContent(): JSX.Element {
   const qualityProfile = useQualityStore((state) => state.profile);
   const effectiveLevel = useQualityStore((state) => state.effectiveLevel);
   const setRenderStats = useQualityStore((state) => state.setRenderStats);
+  const setAssetStats = useQualityStore((state) => state.setAssetStats);
   const camera = useThree((state) => state.camera as PerspectiveCamera);
 
   const evaluated = useMemo(() => evaluateProject(data.project), [data.project]);
+  const nodeRigidBodyEnabled = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const node of Object.values(data.project.nodes)) {
+      map[node.id] = Boolean(node.rigidBody?.enabled);
+    }
+    return map;
+  }, [data.project.nodes]);
   const sceneRuntimeProfile = useMemo(() => computeSceneRuntimeProfile(evaluated.items, effectiveLevel), [evaluated.items, effectiveLevel]);
   const instancingPlan = useMemo(
     () => buildInstancingPlan(evaluated.items, selection, hoveredNodeId, sceneRuntimeProfile.instancingThreshold),
     [evaluated.items, hoveredNodeId, sceneRuntimeProfile.instancingThreshold, selection]
   );
-  const directItems = instancingPlan.directItems;
   const instancedGroups = instancingPlan.instancedGroups;
+  const staticBatchPlan = useMemo(
+    () => buildStaticBatchPlan(instancingPlan.directItems, nodeRigidBodyEnabled, selection, hoveredNodeId, effectiveLevel),
+    [effectiveLevel, hoveredNodeId, instancingPlan.directItems, nodeRigidBodyEnabled, selection]
+  );
+  const directItems = staticBatchPlan.directItems;
+  const staticBatchGroups = staticBatchPlan.staticBatchGroups;
 
   const directItemById = useMemo(() => {
     const map = new Map<string, RenderPrimitive>();
@@ -180,11 +376,60 @@ function SceneContent(): JSX.Element {
     }
     return map;
   }, [instancedGroups]);
+  const staticBatchGroupByKey = useMemo(() => {
+    const map = new Map<string, StaticBatchGroup>();
+    for (const group of staticBatchGroups) {
+      map.set(group.key, group);
+    }
+    return map;
+  }, [staticBatchGroups]);
 
   const instancedBoundsByKey = useMemo(() => computeInstancedGroupBounds(instancedGroups), [instancedGroups]);
+  const staticBatchBoundsByKey = useMemo(() => computeStaticBatchBounds(staticBatchGroups), [staticBatchGroups]);
+  const referencedTextureAssets = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of evaluated.items) {
+      const material = data.project.materials[item.materialId ?? ""];
+      for (const textureId of collectMaterialTextureIds(material)) {
+        ids.add(textureId);
+      }
+    }
+
+    const out: Array<{ id: string; asset: (typeof data.project.textures)[string] }> = [];
+    for (const id of ids) {
+      const asset = data.project.textures[id];
+      if (asset) {
+        out.push({ id, asset });
+      }
+    }
+    return out;
+  }, [data.project.materials, data.project.textures, evaluated.items]);
+  const selectedTextureAssets = useMemo(() => {
+    const selectedIds = new Set(selection);
+    const textureIds = new Set<string>();
+    for (const item of evaluated.items) {
+      if (!selectedIds.has(item.nodeId)) {
+        continue;
+      }
+      const material = data.project.materials[item.materialId ?? ""];
+      for (const textureId of collectMaterialTextureIds(material)) {
+        textureIds.add(textureId);
+      }
+    }
+
+    const out: Array<{ id: string; asset: (typeof data.project.textures)[string] }> = [];
+    for (const id of textureIds) {
+      const asset = data.project.textures[id];
+      if (asset) {
+        out.push({ id, asset });
+      }
+    }
+    return out;
+  }, [data.project.materials, data.project.textures, evaluated.items, selection]);
 
   const meshRefs = useRef<Record<string, Mesh | null>>({});
   const instancedMeshRefs = useRef<Record<string, InstancedMesh | null>>({});
+  const staticBatchMeshRefs = useRef<Record<string, Mesh | null>>({});
   const lodByNodeId = useRef<Record<string, GeometryLodLevel>>({});
   const lodByGroupKey = useRef<Record<string, GeometryLodLevel>>({});
 
@@ -227,6 +472,24 @@ function SceneContent(): JSX.Element {
   }, [instancedGroups]);
 
   useEffect(() => {
+    const alive = new Set(staticBatchGroups.map((group) => group.key));
+    for (const key of Object.keys(staticBatchMeshRefs.current)) {
+      if (!alive.has(key)) {
+        delete staticBatchMeshRefs.current[key];
+        delete cullHiddenAtMs.current[`s:${key}`];
+      }
+    }
+  }, [staticBatchGroups]);
+
+  useEffect(() => {
+    return () => {
+      for (const group of staticBatchGroups) {
+        group.geometry.dispose();
+      }
+    };
+  }, [staticBatchGroups]);
+
+  useEffect(() => {
     const dummy = instancingDummy.current;
     for (const group of instancedGroups) {
       const mesh = instancedMeshRefs.current[group.key];
@@ -246,6 +509,24 @@ function SceneContent(): JSX.Element {
       mesh.instanceMatrix.needsUpdate = true;
     }
   }, [instancedGroups]);
+
+  useEffect(() => {
+    runtimeAssetManager.syncTextureAssets(data.project.textures);
+    runtimeAssetManager.setPinnedTextureIds(referencedTextureAssets.map((entry) => entry.id));
+    if (selectedTextureAssets.length > 0) {
+      runtimeAssetManager.prefetchTextureAssets(
+        selectedTextureAssets.map((entry) => entry.asset),
+        "critical"
+      );
+    }
+    if (referencedTextureAssets.length > 0) {
+      runtimeAssetManager.prefetchTextureAssets(
+        referencedTextureAssets.map((entry) => entry.asset),
+        "low"
+      );
+    }
+    setAssetStats(runtimeAssetManager.getSnapshot());
+  }, [data.project.textures, referencedTextureAssets, selectedTextureAssets, setAssetStats]);
 
   useFrame((state, delta) => {
     const snapshot = useEditorStore.getState().data.project;
@@ -285,6 +566,8 @@ function SceneContent(): JSX.Element {
     let visibleMeshes = csgMeshes.length;
     let culledMeshes = 0;
     let visibleInstancedGroups = 0;
+    let visibleStaticBatchGroups = 0;
+    let visibleStaticBatchMeshes = 0;
     const lodUsage: Record<GeometryLodLevel, number> = {
       high: 0,
       medium: 0,
@@ -382,6 +665,46 @@ function SceneContent(): JSX.Element {
       }
     }
 
+    for (const [groupKey, mesh] of Object.entries(staticBatchMeshRefs.current)) {
+      if (!mesh) {
+        continue;
+      }
+
+      const group = staticBatchGroupByKey.get(groupKey);
+      const bounds = staticBatchBoundsByKey.get(groupKey);
+      if (!group || !bounds) {
+        continue;
+      }
+
+      cullCenter.current.set(bounds.center[0], bounds.center[1], bounds.center[2]);
+      cullSphere.current.center.copy(cullCenter.current);
+      cullSphere.current.radius = bounds.radius * dynamicCullMargin;
+
+      const cullKey = `s:${groupKey}`;
+      const intersects = cullFrustum.current.intersectsSphere(cullSphere.current);
+      let isVisible = intersects;
+      if (intersects) {
+        delete cullHiddenAtMs.current[cullKey];
+      } else {
+        const hiddenAt = cullHiddenAtMs.current[cullKey] ?? nowMs;
+        cullHiddenAtMs.current[cullKey] = hiddenAt;
+        if (nowMs - hiddenAt < cullGraceMs) {
+          isVisible = true;
+        }
+      }
+
+      mesh.visible = isVisible;
+      if (!isVisible) {
+        culledMeshes += group.itemCount;
+        continue;
+      }
+
+      visibleStaticBatchGroups += 1;
+      visibleStaticBatchMeshes += group.itemCount;
+      visibleMeshes += group.itemCount;
+      lodUsage[group.lodLevel] += group.itemCount;
+    }
+
     setRenderStats({
       drawCalls: state.gl.info.render.calls,
       triangles: state.gl.info.render.triangles,
@@ -390,6 +713,8 @@ function SceneContent(): JSX.Element {
       visibleMeshes,
       culledMeshes,
       instancedGroups: visibleInstancedGroups,
+      staticBatchGroups: visibleStaticBatchGroups,
+      staticBatchMeshes: visibleStaticBatchMeshes,
       lodHigh: lodUsage.high,
       lodMedium: lodUsage.medium,
       lodLow: lodUsage.low,
@@ -401,6 +726,7 @@ function SceneContent(): JSX.Element {
       lodNearDistance: lodDistances.near,
       lodMidDistance: lodDistances.mid
     });
+    setAssetStats(runtimeAssetManager.getSnapshot());
   });
 
   useEffect(() => {
@@ -518,6 +844,42 @@ function SceneContent(): JSX.Element {
     setHoveredNodeId(nodeId);
   }
 
+  function nearestNodeIdFromBatchPoint(group: StaticBatchGroup, point: [number, number, number]): string | null {
+    let nearestId: string | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const item of group.items) {
+      const dx = item.transform.position[0] - point[0];
+      const dy = item.transform.position[1] - point[1];
+      const dz = item.transform.position[2] - point[2];
+      const distance = dx * dx + dy * dy + dz * dz;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestId = item.nodeId;
+      }
+    }
+    return nearestId;
+  }
+
+  function handleStaticBatchSelection(event: ThreeEvent<MouseEvent>, group: StaticBatchGroup): void {
+    event.stopPropagation();
+    const point: [number, number, number] = [event.point.x, event.point.y, event.point.z];
+    const nodeId = nearestNodeIdFromBatchPoint(group, point);
+    if (!nodeId) {
+      return;
+    }
+    setSelection(applySelectionRules(selection, nodeId, event.shiftKey));
+  }
+
+  function handleStaticBatchPointerOver(event: ThreeEvent<PointerEvent>, group: StaticBatchGroup): void {
+    event.stopPropagation();
+    const point: [number, number, number] = [event.point.x, event.point.y, event.point.z];
+    const nodeId = nearestNodeIdFromBatchPoint(group, point);
+    if (!nodeId) {
+      return;
+    }
+    setHoveredNodeId(nodeId);
+  }
+
   return (
     <>
       <FramePerformanceProbe />
@@ -594,6 +956,30 @@ function SceneContent(): JSX.Element {
             receiveShadow={qualityProfile.shadows}
             onClick={(event) => handleInstancedSelection(event, group)}
             onPointerOver={(event) => handleInstancedPointerOver(event, group)}
+            onPointerOut={() => setHoveredNodeId(null)}
+          />
+        );
+      })}
+
+      {staticBatchGroups.map((group) => {
+        const materialDef = group.materialId ? data.project.materials[group.materialId] : undefined;
+        const material = buildThreeMaterial(materialDef, (id) => data.project.textures[id]);
+        return (
+          <mesh
+            key={group.key}
+            ref={(ref) => {
+              if (ref) {
+                staticBatchMeshRefs.current[group.key] = ref;
+              } else {
+                delete staticBatchMeshRefs.current[group.key];
+              }
+            }}
+            castShadow={qualityProfile.shadows}
+            receiveShadow={qualityProfile.shadows}
+            geometry={group.geometry}
+            material={material}
+            onClick={(event) => handleStaticBatchSelection(event, group)}
+            onPointerOver={(event) => handleStaticBatchPointerOver(event, group)}
             onPointerOut={() => setHoveredNodeId(null)}
           />
         );

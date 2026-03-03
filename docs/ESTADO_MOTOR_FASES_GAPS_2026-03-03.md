@@ -49,14 +49,14 @@ Fecha de corte: 2026-03-03
 - No tomado en cuenta: paralelizacion ECS por archetypes/chunks y job graph ECS.
 
 ### Fase 5 - Asset Management
-- Hecho: texturas/materiales/templates/versionado/autosave en editor + Asset Vault backend.
+- Hecho: texturas/materiales/templates/versionado/autosave en editor + Asset Vault backend + `RuntimeAssetManager` (manifest id/hash/byteSize/version), cola async con prioridades, prefetch y cache LRU con budget/pins.
 - Documentado para hacer: Asset Vault inteligente global y pipeline de ingest mas fuerte.
-- No tomado en cuenta: streaming dinamico de assets en runtime con presupuesto de memoria y eviction policy formal.
+- No tomado en cuenta: streaming multi-nivel por chunks de mundo abierto y cache distribuido entre escenas.
 
 ### Fase 6 - Optimizacion GPU/CPU
-- Hecho: `QualityManager` (auto/manual), CSG en worker, chunks de build ReyCAD (documentado como aplicado).
+- Hecho: `QualityManager` (auto/manual), CSG en worker, chunks de build ReyCAD, instancing dinamico, culling+LOD runtime y static batching para escenas densas (quality low/medium) con metricas live en `PerformancePanel`.
 - Documentado para hacer: mas hardening de rendimiento en fases de producto.
-- No tomado en cuenta: instancing y batch rendering sistematico con metricas de draw calls por escena.
+- No tomado en cuenta: job system de render multihilo y budget scheduler CPU/GPU por subsistema.
 
 ### Fase 7 - Iluminacion avanzada
 - Hecho: iluminacion basica (ambient + directional) y material fisico PBR.

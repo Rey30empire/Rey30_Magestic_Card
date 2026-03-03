@@ -28,3 +28,14 @@
 - Fase 4 (ECS):
   - filtro por `requiredComponents` en cada sistema.
   - métricas por sistema en `Engine` (`ticks`, `lastDurationMs`, `avgDurationMs`, `totalDurationMs`).
+
+## Endurecimiento adicional (2026-03-03)
+- Fase 5 (asset management):
+  - `RuntimeAssetManager` con manifest runtime (`id`, `hash`, `byteSize`, `kind`, `version`).
+  - carga asíncrona con cola y prioridades (`critical/high/normal/low`).
+  - prefetch de texturas referenciadas por escena y pin de assets activos.
+  - cache LRU con budget de memoria y eviction segura.
+- Fase 6 (optimizacion GPU/CPU):
+  - static batching para escenas densas en quality `low/medium`.
+  - metricas extendidas de render (`staticBatchGroups/staticBatchMeshes`).
+  - metricas de assets en `PerformancePanel` (manifest/cache, loads, hits/misses, memoria).

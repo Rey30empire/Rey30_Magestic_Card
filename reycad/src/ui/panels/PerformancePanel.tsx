@@ -26,6 +26,7 @@ export default function PerformancePanel(): JSX.Element {
   const lastTransitionAt = useQualityStore((state) => state.lastTransitionAt);
   const reason = useQualityStore((state) => state.reason);
   const renderStats = useQualityStore((state) => state.renderStats);
+  const assetStats = useQualityStore((state) => state.assetStats);
   const setMode = useQualityStore((state) => state.setMode);
   const resetMetrics = useQualityStore((state) => state.resetMetrics);
   const physics = useEditorStore((state) => state.data.project.physics);
@@ -153,6 +154,8 @@ export default function PerformancePanel(): JSX.Element {
         <span className="mono">visible meshes: {renderStats.visibleMeshes}</span>
         <span className="mono">culled meshes: {renderStats.culledMeshes}</span>
         <span className="mono">instanced groups: {renderStats.instancedGroups}</span>
+        <span className="mono">static batch groups: {renderStats.staticBatchGroups}</span>
+        <span className="mono">static batch meshes: {renderStats.staticBatchMeshes}</span>
         <span className="mono">lod H/M/L: {renderStats.lodHigh}/{renderStats.lodMedium}/{renderStats.lodLow}</span>
         <span className="mono">scene profile: {renderStats.sceneProfile}</span>
         <span className="mono">scene radius: {renderStats.sceneRadius.toFixed(2)}</span>
@@ -162,6 +165,15 @@ export default function PerformancePanel(): JSX.Element {
         <span className="mono">lod near/mid: {renderStats.lodNearDistance.toFixed(1)} / {renderStats.lodMidDistance.toFixed(1)}</span>
         {lastTransitionAt && <span className="mono">last: {new Date(lastTransitionAt).toLocaleTimeString()}</span>}
         {renderStats.updatedAt && <span className="mono">render stats: {new Date(renderStats.updatedAt).toLocaleTimeString()}</span>}
+        <span className="mono">assets manifest/cache: {assetStats.manifestEntries}/{assetStats.cacheEntries}</span>
+        <span className="mono">asset loads queued/active: {assetStats.queuedLoads}/{assetStats.activeLoads}</span>
+        <span className="mono">asset hits/misses: {assetStats.hits}/{assetStats.misses}</span>
+        <span className="mono">asset loads ok/fail: {assetStats.completedLoads}/{assetStats.failedLoads}</span>
+        <span className="mono">asset evictions: {assetStats.evictions}</span>
+        <span className="mono">
+          asset memory: {(assetStats.bytesUsed / (1024 * 1024)).toFixed(1)}MB / {(assetStats.bytesBudget / (1024 * 1024)).toFixed(1)}MB
+        </span>
+        {assetStats.updatedAt && <span className="mono">asset stats: {new Date(assetStats.updatedAt).toLocaleTimeString()}</span>}
         {reason && <span className="mono">reason: {reason}</span>}
       </div>
 

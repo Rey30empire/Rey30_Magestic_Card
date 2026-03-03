@@ -18,6 +18,15 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function readImageDimensions(dataUrl: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.width, height: image.height });
+    image.onerror = () => resolve(null);
+    image.src = dataUrl;
+  });
+}
+
 export default function AssetsPanel(): JSX.Element {
   const [tab, setTab] = useState<Tab>("templates");
   const [query, setQuery] = useState("");
@@ -76,7 +85,14 @@ export default function AssetsPanel(): JSX.Element {
     setUploadingTexture(true);
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const id = engineApi.createTextureAsset(file.name, dataUrl, file.type || "image/png");
+      const size = await readImageDimensions(dataUrl);
+      const id = engineApi.createTextureAsset(
+        file.name,
+        dataUrl,
+        file.type || "image/png",
+        size?.width,
+        size?.height
+      );
       if (id) {
         setSelectedTextureId(id);
       }

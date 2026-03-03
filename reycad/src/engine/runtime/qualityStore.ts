@@ -9,6 +9,8 @@ export type RenderStatsSnapshot = {
   visibleMeshes: number;
   culledMeshes: number;
   instancedGroups: number;
+  staticBatchGroups: number;
+  staticBatchMeshes: number;
   lodHigh: number;
   lodMedium: number;
   lodLow: number;
@@ -30,6 +32,8 @@ const DEFAULT_RENDER_STATS: RenderStatsSnapshot = {
   visibleMeshes: 0,
   culledMeshes: 0,
   instancedGroups: 0,
+  staticBatchGroups: 0,
+  staticBatchMeshes: 0,
   lodHigh: 0,
   lodMedium: 0,
   lodLow: 0,
@@ -45,6 +49,40 @@ const DEFAULT_RENDER_STATS: RenderStatsSnapshot = {
 
 export type RenderStatsInput = Omit<RenderStatsSnapshot, "updatedAt">;
 
+export type AssetStatsSnapshot = {
+  manifestEntries: number;
+  cacheEntries: number;
+  queuedLoads: number;
+  activeLoads: number;
+  bytesUsed: number;
+  bytesBudget: number;
+  hits: number;
+  misses: number;
+  completedLoads: number;
+  failedLoads: number;
+  evictions: number;
+  prefetchQueued: number;
+  updatedAt: string | null;
+};
+
+export type AssetStatsInput = Omit<AssetStatsSnapshot, "updatedAt">;
+
+const DEFAULT_ASSET_STATS: AssetStatsSnapshot = {
+  manifestEntries: 0,
+  cacheEntries: 0,
+  queuedLoads: 0,
+  activeLoads: 0,
+  bytesUsed: 0,
+  bytesBudget: 0,
+  hits: 0,
+  misses: 0,
+  completedLoads: 0,
+  failedLoads: 0,
+  evictions: 0,
+  prefetchQueued: 0,
+  updatedAt: null
+};
+
 type QualityStore = {
   mode: QualityMode;
   effectiveLevel: QualityLevel;
@@ -56,10 +94,12 @@ type QualityStore = {
   lastTransitionAt: string | null;
   reason: string | null;
   renderStats: RenderStatsSnapshot;
+  assetStats: AssetStatsSnapshot;
   setMode: (mode: QualityMode) => void;
   ingestFrameMs: (frameMs: number) => void;
   resetMetrics: () => void;
   setRenderStats: (stats: RenderStatsInput) => void;
+  setAssetStats: (stats: AssetStatsInput) => void;
 };
 
 const qualityManager = new QualityManager();
@@ -93,6 +133,7 @@ function applySnapshot(snapshot: QualitySnapshot): QualitySnapshotState {
 export const useQualityStore = create<QualityStore>((set) => ({
   ...applySnapshot(qualityManager.getSnapshot()),
   renderStats: DEFAULT_RENDER_STATS,
+  assetStats: DEFAULT_ASSET_STATS,
   setMode(mode) {
     const snapshot = qualityManager.setMode(mode);
     set(applySnapshot(snapshot));
@@ -105,7 +146,8 @@ export const useQualityStore = create<QualityStore>((set) => ({
     const snapshot = qualityManager.resetMetrics();
     set({
       ...applySnapshot(snapshot),
-      renderStats: DEFAULT_RENDER_STATS
+      renderStats: DEFAULT_RENDER_STATS,
+      assetStats: DEFAULT_ASSET_STATS
     });
   },
   setRenderStats(stats) {
@@ -119,6 +161,8 @@ export const useQualityStore = create<QualityStore>((set) => ({
         current.visibleMeshes === stats.visibleMeshes &&
         current.culledMeshes === stats.culledMeshes &&
         current.instancedGroups === stats.instancedGroups &&
+        current.staticBatchGroups === stats.staticBatchGroups &&
+        current.staticBatchMeshes === stats.staticBatchMeshes &&
         current.lodHigh === stats.lodHigh &&
         current.lodMedium === stats.lodMedium &&
         current.lodLow === stats.lodLow &&
@@ -135,6 +179,34 @@ export const useQualityStore = create<QualityStore>((set) => ({
 
       return {
         renderStats: {
+          ...stats,
+          updatedAt: new Date().toISOString()
+        }
+      };
+    });
+  },
+  setAssetStats(stats) {
+    set((state) => {
+      const current = state.assetStats;
+      if (
+        current.manifestEntries === stats.manifestEntries &&
+        current.cacheEntries === stats.cacheEntries &&
+        current.queuedLoads === stats.queuedLoads &&
+        current.activeLoads === stats.activeLoads &&
+        current.bytesUsed === stats.bytesUsed &&
+        current.bytesBudget === stats.bytesBudget &&
+        current.hits === stats.hits &&
+        current.misses === stats.misses &&
+        current.completedLoads === stats.completedLoads &&
+        current.failedLoads === stats.failedLoads &&
+        current.evictions === stats.evictions &&
+        current.prefetchQueued === stats.prefetchQueued
+      ) {
+        return state;
+      }
+
+      return {
+        assetStats: {
           ...stats,
           updatedAt: new Date().toISOString()
         }

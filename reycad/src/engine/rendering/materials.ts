@@ -1,38 +1,39 @@
-import { Color, MeshPhysicalMaterial, MeshStandardMaterial, SRGBColorSpace, Texture, TextureLoader } from "three";
+import { Color, MeshPhysicalMaterial, MeshStandardMaterial, Texture } from "three";
 import type { MaterialDef, TextureAsset } from "../scenegraph/types";
+import { runtimeAssetManager } from "../runtime/assetManager";
 
 const materialCache = new Map<string, MeshStandardMaterial>();
-const textureCache = new Map<string, Texture>();
-const textureLoader = new TextureLoader();
 
-function resolveTexture(assetId: string | undefined, getTextureAsset?: (id: string) => TextureAsset | undefined): Texture | null {
+function resolveTexture(
+  assetId: string | undefined,
+  getTextureAsset?: (id: string) => TextureAsset | undefined
+): { texture: Texture | null; mapKey: string } {
   if (!assetId || !getTextureAsset) {
-    return null;
+    return { texture: null, mapKey: "none" };
   }
   const asset = getTextureAsset(assetId);
   if (!asset) {
-    return null;
+    return { texture: null, mapKey: `${assetId}:missing` };
   }
-  const cacheKey = `${asset.id}:${asset.dataUrl}`;
-  const cached = textureCache.get(cacheKey);
+  const manifest = runtimeAssetManager.upsertTextureAsset(asset);
+  const cached = runtimeAssetManager.getCachedTexture(asset.id);
   if (cached) {
-    return cached;
+    return {
+      texture: cached,
+      mapKey: `${manifest.id}:${manifest.version}:ready`
+    };
   }
 
-  try {
-    const texture = textureLoader.load(asset.dataUrl);
-    texture.colorSpace = SRGBColorSpace;
-    texture.needsUpdate = true;
-    textureCache.set(cacheKey, texture);
-    return texture;
-  } catch {
-    return null;
-  }
+  void runtimeAssetManager.loadTextureAsset(asset, "high");
+  return {
+    texture: null,
+    mapKey: `${manifest.id}:${manifest.version}:pending`
+  };
 }
 
 export function buildThreeMaterial(materialDef?: MaterialDef, getTextureAsset?: (id: string) => TextureAsset | undefined): MeshStandardMaterial {
-  const mapData = materialDef?.pbr?.baseColorMapId ? getTextureAsset?.(materialDef.pbr.baseColorMapId)?.dataUrl ?? "" : "";
-  const mapKey = mapData.length > 0 ? `${mapData.length}:${mapData.slice(0, 64)}` : "none";
+  const textureState = resolveTexture(materialDef?.pbr?.baseColorMapId, getTextureAsset);
+  const mapKey = textureState.mapKey;
   const key = materialDef ? `${JSON.stringify(materialDef)}::map:${mapKey}` : "default";
   const cached = materialCache.get(key);
   if (cached) {
@@ -63,7 +64,7 @@ export function buildThreeMaterial(materialDef?: MaterialDef, getTextureAsset?: 
       transmission: pbr.transmission ?? (materialDef.id.includes("glass") ? 0.45 : 0),
       ior: pbr.ior ?? 1.45
     });
-    const baseColorMap = resolveTexture(pbr.baseColorMapId, getTextureAsset);
+    const baseColorMap = textureState.texture;
     if (baseColorMap) {
       material.map = baseColorMap;
       material.needsUpdate = true;
