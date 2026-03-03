@@ -93,7 +93,7 @@ const DEFAULT_ASSET_STATS: AssetStatsSnapshot = {
   updatedAt: null
 };
 
-type QualityStore = {
+export type QualityStore = {
   mode: QualityMode;
   effectiveLevel: QualityLevel;
   profile: QualityProfile;
@@ -111,8 +111,6 @@ type QualityStore = {
   setRenderStats: (stats: RenderStatsInput) => void;
   setAssetStats: (stats: AssetStatsInput) => void;
 };
-
-const qualityManager = new QualityManager();
 
 type QualitySnapshotState = {
   mode: QualityMode;
@@ -140,95 +138,124 @@ function applySnapshot(snapshot: QualitySnapshot): QualitySnapshotState {
   };
 }
 
-export const useQualityStore = create<QualityStore>((set) => ({
-  ...applySnapshot(qualityManager.getSnapshot()),
-  renderStats: DEFAULT_RENDER_STATS,
-  assetStats: DEFAULT_ASSET_STATS,
-  setMode(mode) {
-    const snapshot = qualityManager.setMode(mode);
-    set(applySnapshot(snapshot));
-  },
-  ingestFrameMs(frameMs) {
-    const snapshot = qualityManager.observeFrame(frameMs);
-    set(applySnapshot(snapshot));
-  },
-  resetMetrics() {
-    const snapshot = qualityManager.resetMetrics();
-    set({
-      ...applySnapshot(snapshot),
-      renderStats: DEFAULT_RENDER_STATS,
-      assetStats: DEFAULT_ASSET_STATS
-    });
-  },
-  setRenderStats(stats) {
-    set((state) => {
-      const current = state.renderStats;
-      if (
-        current.drawCalls === stats.drawCalls &&
-        current.triangles === stats.triangles &&
-        current.budgetDrawCallsTarget === stats.budgetDrawCallsTarget &&
-        current.budgetTrianglesTarget === stats.budgetTrianglesTarget &&
-        current.budgetDrawCallUsage === stats.budgetDrawCallUsage &&
-        current.budgetTriangleUsage === stats.budgetTriangleUsage &&
-        current.budgetAlert === stats.budgetAlert &&
-        current.lines === stats.lines &&
-        current.points === stats.points &&
-        current.visibleMeshes === stats.visibleMeshes &&
-        current.culledMeshes === stats.culledMeshes &&
-        current.instancedGroups === stats.instancedGroups &&
-        current.staticBatchGroups === stats.staticBatchGroups &&
-        current.staticBatchMeshes === stats.staticBatchMeshes &&
-        current.lodHigh === stats.lodHigh &&
-        current.lodMedium === stats.lodMedium &&
-        current.lodLow === stats.lodLow &&
-        current.sceneProfile === stats.sceneProfile &&
-        current.sceneRadius === stats.sceneRadius &&
-        current.sceneNodeCount === stats.sceneNodeCount &&
-        current.instancingThreshold === stats.instancingThreshold &&
-        current.cullMargin === stats.cullMargin &&
-        current.lodNearDistance === stats.lodNearDistance &&
-        current.lodMidDistance === stats.lodMidDistance
-      ) {
-        return state;
-      }
+export function createQualityStore(manager: QualityManager = new QualityManager()) {
+  return create<QualityStore>((set) => ({
+    ...applySnapshot(manager.getSnapshot()),
+    renderStats: DEFAULT_RENDER_STATS,
+    assetStats: DEFAULT_ASSET_STATS,
+    setMode(mode) {
+      const snapshot = manager.setMode(mode);
+      set(applySnapshot(snapshot));
+    },
+    ingestFrameMs(frameMs) {
+      const snapshot = manager.observeFrame(frameMs);
+      set(applySnapshot(snapshot));
+    },
+    resetMetrics() {
+      const snapshot = manager.resetMetrics();
+      set({
+        ...applySnapshot(snapshot),
+        renderStats: DEFAULT_RENDER_STATS,
+        assetStats: DEFAULT_ASSET_STATS
+      });
+    },
+    setRenderStats(stats) {
+      const budgetSnapshot = manager.observeBudgetAlert(stats.budgetAlert);
+      const qualityState = applySnapshot(budgetSnapshot);
 
-      return {
-        renderStats: {
-          ...stats,
-          updatedAt: new Date().toISOString()
-        }
-      };
-    });
-  },
-  setAssetStats(stats) {
-    set((state) => {
-      const current = state.assetStats;
-      if (
-        current.manifestEntries === stats.manifestEntries &&
-        current.cacheEntries === stats.cacheEntries &&
-        current.queuedLoads === stats.queuedLoads &&
-        current.activeLoads === stats.activeLoads &&
-        current.bytesUsed === stats.bytesUsed &&
-        current.bytesBudget === stats.bytesBudget &&
-        current.hits === stats.hits &&
-        current.misses === stats.misses &&
-        current.completedLoads === stats.completedLoads &&
-        current.failedLoads === stats.failedLoads &&
-        current.evictions === stats.evictions &&
-        current.prefetchQueued === stats.prefetchQueued
-      ) {
-        return state;
-      }
+      set((state) => {
+        const current = state.renderStats;
+        const renderUnchanged =
+          current.drawCalls === stats.drawCalls &&
+          current.triangles === stats.triangles &&
+          current.budgetDrawCallsTarget === stats.budgetDrawCallsTarget &&
+          current.budgetTrianglesTarget === stats.budgetTrianglesTarget &&
+          current.budgetDrawCallUsage === stats.budgetDrawCallUsage &&
+          current.budgetTriangleUsage === stats.budgetTriangleUsage &&
+          current.budgetAlert === stats.budgetAlert &&
+          current.lines === stats.lines &&
+          current.points === stats.points &&
+          current.visibleMeshes === stats.visibleMeshes &&
+          current.culledMeshes === stats.culledMeshes &&
+          current.instancedGroups === stats.instancedGroups &&
+          current.staticBatchGroups === stats.staticBatchGroups &&
+          current.staticBatchMeshes === stats.staticBatchMeshes &&
+          current.lodHigh === stats.lodHigh &&
+          current.lodMedium === stats.lodMedium &&
+          current.lodLow === stats.lodLow &&
+          current.sceneProfile === stats.sceneProfile &&
+          current.sceneRadius === stats.sceneRadius &&
+          current.sceneNodeCount === stats.sceneNodeCount &&
+          current.instancingThreshold === stats.instancingThreshold &&
+          current.cullMargin === stats.cullMargin &&
+          current.lodNearDistance === stats.lodNearDistance &&
+          current.lodMidDistance === stats.lodMidDistance;
 
-      return {
-        assetStats: {
-          ...stats,
-          updatedAt: new Date().toISOString()
+        const qualityUnchanged =
+          state.mode === qualityState.mode &&
+          state.effectiveLevel === qualityState.effectiveLevel &&
+          state.profile.dpr === qualityState.profile.dpr &&
+          state.profile.shadows === qualityState.profile.shadows &&
+          state.profile.antialias === qualityState.profile.antialias &&
+          state.profile.powerPreference === qualityState.profile.powerPreference &&
+          state.profile.csgDetail === qualityState.profile.csgDetail &&
+          state.fps === qualityState.fps &&
+          state.frameMs === qualityState.frameMs &&
+          state.sampleCount === qualityState.sampleCount &&
+          state.transitions === qualityState.transitions &&
+          state.lastTransitionAt === qualityState.lastTransitionAt &&
+          state.reason === qualityState.reason;
+
+        if (renderUnchanged && qualityUnchanged) {
+          return state;
         }
-      };
-    });
-  }
-}));
+
+        const nextState: Partial<QualityStore> = {};
+        if (!qualityUnchanged) {
+          Object.assign(nextState, qualityState);
+        }
+        if (!renderUnchanged) {
+          nextState.renderStats = {
+            ...stats,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return nextState;
+      });
+    },
+    setAssetStats(stats) {
+      set((state) => {
+        const current = state.assetStats;
+        if (
+          current.manifestEntries === stats.manifestEntries &&
+          current.cacheEntries === stats.cacheEntries &&
+          current.queuedLoads === stats.queuedLoads &&
+          current.activeLoads === stats.activeLoads &&
+          current.bytesUsed === stats.bytesUsed &&
+          current.bytesBudget === stats.bytesBudget &&
+          current.hits === stats.hits &&
+          current.misses === stats.misses &&
+          current.completedLoads === stats.completedLoads &&
+          current.failedLoads === stats.failedLoads &&
+          current.evictions === stats.evictions &&
+          current.prefetchQueued === stats.prefetchQueued
+        ) {
+          return state;
+        }
+
+        return {
+          assetStats: {
+            ...stats,
+            updatedAt: new Date().toISOString()
+          }
+        };
+      });
+    }
+  }));
+}
+
+const qualityManager = new QualityManager();
+export const useQualityStore = createQualityStore(qualityManager);
 
 export function getQualitySnapshot(): ReturnType<typeof applySnapshot> {
   return applySnapshot(qualityManager.getSnapshot());

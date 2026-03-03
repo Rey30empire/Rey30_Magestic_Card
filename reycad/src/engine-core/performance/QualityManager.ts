@@ -1,5 +1,6 @@
 export type QualityLevel = "low" | "medium" | "high" | "ultra";
 export type QualityMode = QualityLevel | "auto";
+export type SceneBudgetAlertLevel = "ok" | "warn" | "critical";
 
 export type QualityProfile = {
   dpr: number;
@@ -27,6 +28,8 @@ export type QualityManagerConfig = {
   minSampleCount?: number;
   maxSampleCount?: number;
   transitionCooldownMs?: number;
+  budgetWarnSampleCount?: number;
+  budgetTransitionCooldownMs?: number;
 };
 
 const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
@@ -80,6 +83,19 @@ function estimateAutoLevel(fps: number): QualityLevel {
   return "ultra";
 }
 
+function downgradeQualityLevel(level: QualityLevel): QualityLevel {
+  if (level === "ultra") {
+    return "high";
+  }
+  if (level === "high") {
+    return "medium";
+  }
+  if (level === "medium") {
+    return "low";
+  }
+  return "low";
+}
+
 export class QualityManager {
   private mode: QualityMode = "auto";
   private effectiveLevel: QualityLevel = "high";
@@ -93,15 +109,23 @@ export class QualityManager {
   private readonly minSampleCount: number;
   private readonly maxSampleCount: number;
   private readonly transitionCooldownMs: number;
+  private readonly budgetWarnSampleCount: number;
+  private readonly budgetTransitionCooldownMs: number;
+  private budgetWarnSamples = 0;
+  private lastBudgetSwitchAtMs = 0;
 
   constructor(config: QualityManagerConfig = {}) {
     this.minSampleCount = Math.max(4, Math.floor(config.minSampleCount ?? 36));
     this.maxSampleCount = Math.max(this.minSampleCount, Math.floor(config.maxSampleCount ?? 120));
     this.transitionCooldownMs = Math.max(0, config.transitionCooldownMs ?? 3500);
+    this.budgetWarnSampleCount = Math.max(2, Math.floor(config.budgetWarnSampleCount ?? 24));
+    this.budgetTransitionCooldownMs = Math.max(0, config.budgetTransitionCooldownMs ?? 2800);
   }
 
   setMode(mode: QualityMode): QualitySnapshot {
     this.mode = mode;
+    this.budgetWarnSamples = 0;
+    this.lastBudgetSwitchAtMs = 0;
     if (mode !== "auto") {
       this.setEffectiveLevel(mode, `manual:${mode}`);
     } else {
@@ -132,6 +156,40 @@ export class QualityManager {
     return this.getSnapshot();
   }
 
+  observeBudgetAlert(alert: SceneBudgetAlertLevel): QualitySnapshot {
+    if (alert === "ok") {
+      this.budgetWarnSamples = 0;
+      return this.getSnapshot();
+    }
+
+    if (this.mode !== "auto") {
+      return this.getSnapshot();
+    }
+
+    if (alert === "warn") {
+      this.budgetWarnSamples += 1;
+      if (this.budgetWarnSamples < this.budgetWarnSampleCount) {
+        return this.getSnapshot();
+      }
+    } else {
+      this.budgetWarnSamples = this.budgetWarnSampleCount;
+    }
+
+    const now = nowMs();
+    const switchCooldown = Math.max(this.transitionCooldownMs, this.budgetTransitionCooldownMs);
+    if (now - this.lastSwitchAtMs < switchCooldown || now - this.lastBudgetSwitchAtMs < this.budgetTransitionCooldownMs) {
+      return this.getSnapshot();
+    }
+
+    const nextLevel = downgradeQualityLevel(this.effectiveLevel);
+    if (nextLevel !== this.effectiveLevel) {
+      this.setEffectiveLevel(nextLevel, `auto:budget:${alert}`);
+      this.lastBudgetSwitchAtMs = now;
+    }
+    this.budgetWarnSamples = 0;
+    return this.getSnapshot();
+  }
+
   resetMetrics(): QualitySnapshot {
     this.sampleFrames = [];
     this.avgFrameMs = 16.67;
@@ -139,6 +197,8 @@ export class QualityManager {
     this.lastTransitionReason = null;
     this.lastTransitionAt = null;
     this.lastSwitchAtMs = 0;
+    this.lastBudgetSwitchAtMs = 0;
+    this.budgetWarnSamples = 0;
     this.transitions = 0;
     if (this.mode === "auto") {
       this.setEffectiveLevel("high", "auto:reset");

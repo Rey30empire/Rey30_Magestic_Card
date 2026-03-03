@@ -49,6 +49,19 @@ jobs:
       - name: ReyCAD Build
         run: npm run reycad:build
 
+      - name: ReyCAD Benchmark Gate
+        env:
+          REYCAD_BENCH_OUTPUT: benchmarks/ci/reycad-runtime-report.json
+        run: npm run reycad:benchmark:ci
+
+      - name: Upload ReyCAD Benchmark Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reycad-benchmark-report
+          path: benchmarks/ci/reycad-runtime-report.json
+          if-no-files-found: ignore
+
   backend:
     runs-on: windows-latest
     timeout-minutes: 30

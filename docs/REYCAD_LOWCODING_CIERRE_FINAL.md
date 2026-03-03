@@ -41,4 +41,7 @@
   - metricas de assets en `PerformancePanel` (manifest/cache, loads, hits/misses, memoria).
   - `engineApi.generateBenchmarkScene(preset)` + panel de benchmark para pruebas reproducibles de rendimiento.
   - presupuesto automatico por escena (`drawCalls/triangles`) con alerta en tiempo real (`ok/warn/critical`) y logs de transicion.
+  - reaccion automatica del `QualityManager` en modo `auto` cuando el budget entra en `warn/critical`.
   - prefetch hibrido por camara + seleccion con prioridad dinamica para reducir stutter durante navegacion.
+  - benchmark CLI versionado (`scripts/benchmark-reycad-runtime.ts`) con baseline, reporte JSON por corrida y gate de CI (`npm run reycad:benchmark:ci` + artifact).
+  - pruebas unitarias del flujo completo `budgetAlert -> qualityStore -> QualityManager` para blindar regresiones.

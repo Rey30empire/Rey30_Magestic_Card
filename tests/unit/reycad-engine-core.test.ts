@@ -94,6 +94,54 @@ test("QualityManager auto mode degrades quality when fps is low", () => {
   assert.equal(snapshot.effectiveLevel, "low");
 });
 
+test("QualityManager auto mode degrades one step on critical budget alert", () => {
+  const manager = new QualityManager({
+    minSampleCount: 4,
+    transitionCooldownMs: 0,
+    budgetTransitionCooldownMs: 0
+  });
+  manager.setMode("auto");
+  assert.equal(manager.getSnapshot().effectiveLevel, "ultra");
+
+  manager.observeBudgetAlert("critical");
+  const snapshot = manager.getSnapshot();
+  assert.equal(snapshot.effectiveLevel, "high");
+  assert.equal(snapshot.metrics.reason, "auto:budget:critical");
+});
+
+test("QualityManager requires warn streak before budget downgrade", () => {
+  const manager = new QualityManager({
+    minSampleCount: 4,
+    transitionCooldownMs: 0,
+    budgetTransitionCooldownMs: 0,
+    budgetWarnSampleCount: 3
+  });
+  manager.setMode("auto");
+  assert.equal(manager.getSnapshot().effectiveLevel, "ultra");
+
+  manager.observeBudgetAlert("warn");
+  manager.observeBudgetAlert("warn");
+  assert.equal(manager.getSnapshot().effectiveLevel, "ultra");
+
+  manager.observeBudgetAlert("warn");
+  assert.equal(manager.getSnapshot().effectiveLevel, "high");
+  assert.equal(manager.getSnapshot().metrics.reason, "auto:budget:warn");
+});
+
+test("QualityManager ignores budget alerts in manual mode", () => {
+  const manager = new QualityManager({
+    transitionCooldownMs: 0,
+    budgetTransitionCooldownMs: 0
+  });
+  manager.setMode("ultra");
+  manager.observeBudgetAlert("critical");
+
+  const snapshot = manager.getSnapshot();
+  assert.equal(snapshot.mode, "ultra");
+  assert.equal(snapshot.effectiveLevel, "ultra");
+  assert.equal(snapshot.metrics.reason, "manual:ultra");
+});
+
 test("Terrain primitive builds displaced geometry", () => {
   const terrain = createPrimitiveNode("terrain");
   const renderPrimitive: RenderPrimitive = {

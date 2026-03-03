@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "thresholdMultiplier": 3,
+  "iterations": 6,
+  "warmupIterations": 2,
+  "scenes": {
+    "indoor": {
+      "nodeCountMin": 65,
+      "generateMsP95": 80,
+      "evaluateMsP95": 55
+    },
+    "outdoor": {
+      "nodeCountMin": 145,
+      "generateMsP95": 220,
+      "evaluateMsP95": 120
+    },
+    "large-world": {
+      "nodeCountMin": 325,
+      "generateMsP95": 650,
+      "evaluateMsP95": 320
+    }
+  }
+}
