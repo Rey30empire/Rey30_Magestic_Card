@@ -4,7 +4,7 @@ import { createPrimitiveNode, createProject } from "../../reycad/src/engine/scen
 import { buildGeometryFromPrimitive } from "../../reycad/src/engine/rendering/geometry";
 import type { RenderPrimitive } from "../../reycad/src/engine/scenegraph/evaluator";
 import { Engine } from "../../reycad/src/engine-core/core/Engine";
-import { BaseSystem } from "../../reycad/src/engine-core/core/System";
+import { BaseSystem, type EngineUpdateContext } from "../../reycad/src/engine-core/core/System";
 import { QualityManager } from "../../reycad/src/engine-core/performance/QualityManager";
 import { PhysicsWorld } from "../../reycad/src/engine-core/physics/PhysicsWorld";
 import { PhysicsSystem } from "../../reycad/src/engine-core/physics/PhysicsSystem";
@@ -36,6 +36,46 @@ test("Engine updates systems in stage order", () => {
   engine.update(1 / 60);
 
   assert.deepEqual(order, ["input", "script", "physics", "animation", "render"]);
+});
+
+test("Engine filters system entities by required components and records metrics", () => {
+  const engine = new Engine();
+  const plain = engine.createEntity();
+  const dynamic = engine.createEntity();
+
+  dynamic.addComponent({
+    type: "RigidBody",
+    enabled: true,
+    mode: "dynamic",
+    mass: 1,
+    gravityScale: 1,
+    lockRotation: true
+  });
+
+  const seen: string[] = [];
+  class FilteredSystem extends BaseSystem {
+    constructor() {
+      super("filtered.system", "script", 0, ["RigidBody"]);
+    }
+
+    update(context: EngineUpdateContext): void {
+      for (const entity of context.entities) {
+        seen.push(entity.id);
+      }
+    }
+  }
+
+  engine.addSystem(new FilteredSystem());
+  engine.update(1 / 60);
+
+  assert.deepEqual(seen, [dynamic.id]);
+  assert.notEqual(plain.id, dynamic.id);
+
+  const metrics = engine.getSystemMetrics();
+  assert.equal(metrics.length, 1);
+  assert.equal(metrics[0].systemId, "filtered.system");
+  assert.equal(metrics[0].ticks, 1);
+  assert.ok(metrics[0].totalDurationMs >= 0);
 });
 
 test("QualityManager auto mode degrades quality when fps is low", () => {
@@ -146,6 +186,52 @@ test("PhysicsSystem floor collision clamps body above floor", () => {
   assert.ok(transform.position[1] >= 0.5, "expected collider to remain over floor");
 });
 
+test("PhysicsSystem substeps large deltas for stable integration", () => {
+  const createSetup = (maxSubSteps: number) => {
+    const engine = new Engine();
+    const physics = new PhysicsSystem({
+      backend: "lite",
+      gravity: [0, -9.81, 0],
+      floorY: -1000,
+      fixedTimeStep: 1 / 60,
+      maxSubSteps
+    });
+    engine.addSystem(physics);
+
+    const entity = engine.createEntity();
+    const transform = entity.getComponent<TransformComponent>("Transform");
+    assert.ok(transform);
+    transform.position = [0, 10, 0];
+
+    entity.addComponent({
+      type: "RigidBody",
+      enabled: true,
+      mode: "dynamic",
+      mass: 1,
+      gravityScale: 1,
+      lockRotation: true,
+      linearVelocity: [0, 0, 0]
+    });
+
+    return { engine, transform };
+  };
+
+  const noSubSteps = createSetup(1);
+  const withSubSteps = createSetup(8);
+  const reference = createSetup(32);
+
+  noSubSteps.engine.update(0.4);
+  withSubSteps.engine.update(0.4);
+  reference.engine.update(0.4);
+
+  const errorWithoutSubSteps = Math.abs(noSubSteps.transform.position[1] - reference.transform.position[1]);
+  const errorWithSubSteps = Math.abs(withSubSteps.transform.position[1] - reference.transform.position[1]);
+  assert.ok(
+    errorWithSubSteps < errorWithoutSubSteps,
+    `expected substeps to improve stability (with=${errorWithSubSteps}, without=${errorWithoutSubSteps})`
+  );
+});
+
 test("PhysicsWorld emits exit contact events when overlap ends", () => {
   const world = new PhysicsWorld({
     backend: "lite",
@@ -190,6 +276,49 @@ test("PhysicsWorld emits exit contact events when overlap ends", () => {
   world.step(1 / 60);
   const second = world.drainContactEvents();
   assert.ok(second.some((event) => event.type === "exit"), "expected exit event");
+});
+
+test("PhysicsWorld broadphase keeps overlap detection across multiple cells", () => {
+  const world = new PhysicsWorld({
+    backend: "lite",
+    gravity: [0, 0, 0],
+    floorY: -1000,
+    broadphaseCellSize: 1
+  });
+
+  const big: ColliderComponent = {
+    type: "Collider",
+    enabled: true,
+    shape: "box",
+    isTrigger: false,
+    size: [4, 4, 4]
+  };
+  const small: ColliderComponent = {
+    type: "Collider",
+    enabled: true,
+    shape: "box",
+    isTrigger: false,
+    size: [1, 1, 1]
+  };
+
+  world.upsertCollider("big", {
+    type: "Transform",
+    enabled: true,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1]
+  }, big);
+  world.upsertCollider("small", {
+    type: "Transform",
+    enabled: true,
+    position: [1.5, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1]
+  }, small);
+
+  world.step(1 / 60);
+  const events = world.drainContactEvents();
+  assert.ok(events.some((event) => event.type === "enter"), "expected broadphase overlap enter event");
 });
 
 test("PhysicsWorld distance constraints enforce target spacing", () => {

@@ -14,14 +14,25 @@ function colliderOf(entity: EngineUpdateContext["entities"][number]): ColliderCo
   return entity.getComponent<ColliderComponent>("Collider") ?? null;
 }
 
+export type PhysicsSystemOptions = PhysicsWorldOptions & {
+  fixedTimeStep?: number;
+  maxSubSteps?: number;
+};
+
 export class PhysicsSystem extends BaseSystem {
   private readonly world: PhysicsWorld;
+  private readonly fixedTimeStep: number;
+  private readonly maxSubSteps: number;
   private initialized = false;
   private initializeInFlight = false;
 
-  constructor(options: PhysicsWorldOptions = {}) {
-    super("physics.system", "physics", 0);
+  constructor(options: PhysicsSystemOptions = {}) {
+    super("physics.system", "physics", 0, ["Transform"]);
     this.world = new PhysicsWorld(options);
+    const fixedTimeStep = Number.isFinite(options.fixedTimeStep) ? (options.fixedTimeStep as number) : 1 / 60;
+    this.fixedTimeStep = Math.max(1 / 240, fixedTimeStep);
+    const maxSubSteps = Number.isFinite(options.maxSubSteps) ? (options.maxSubSteps as number) : 8;
+    this.maxSubSteps = Math.max(1, Math.floor(maxSubSteps));
   }
 
   getWorld(): PhysicsWorld {
@@ -66,7 +77,11 @@ export class PhysicsSystem extends BaseSystem {
       }
     }
 
-    this.world.step(context.deltaTime);
+    const subStepCount = Math.max(1, Math.min(this.maxSubSteps, Math.ceil(context.deltaTime / this.fixedTimeStep)));
+    const subStepDelta = context.deltaTime / subStepCount;
+    for (let stepIndex = 0; stepIndex < subStepCount; stepIndex += 1) {
+      this.world.step(subStepDelta);
+    }
     this.world.drainContactEvents();
 
     for (const entity of context.entities) {

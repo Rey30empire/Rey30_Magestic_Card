@@ -11,10 +11,21 @@ const STAGE_ORDER: Record<EngineUpdateStage, number> = {
   render: 4
 };
 
+export type EngineSystemMetric = {
+  systemId: string;
+  stage: EngineUpdateStage;
+  priority: number;
+  ticks: number;
+  lastDurationMs: number;
+  avgDurationMs: number;
+  totalDurationMs: number;
+};
+
 export class Engine {
   private readonly entitiesById = new Map<string, EngineEntity>();
   private readonly sceneGraph = new EngineSceneGraph();
   private readonly systems: EngineSystem[] = [];
+  private readonly systemMetrics = new Map<string, EngineSystemMetric>();
   private elapsedTime = 0;
 
   createEntity(parentId: string | null = null, id?: string): EngineEntity {
@@ -51,6 +62,17 @@ export class Engine {
       }
       return a.priority - b.priority;
     });
+    if (!this.systemMetrics.has(system.id)) {
+      this.systemMetrics.set(system.id, {
+        systemId: system.id,
+        stage: system.stage,
+        priority: system.priority,
+        ticks: 0,
+        lastDurationMs: 0,
+        avgDurationMs: 0,
+        totalDurationMs: 0
+      });
+    }
   }
 
   removeSystem(systemId: string): boolean {
@@ -59,6 +81,7 @@ export class Engine {
       return false;
     }
     this.systems.splice(index, 1);
+    this.systemMetrics.delete(systemId);
     return true;
   }
 
@@ -74,12 +97,35 @@ export class Engine {
       if (!system.enabled) {
         continue;
       }
+      const scopedEntities =
+        system.requiredComponents.length === 0
+          ? entities
+          : entities.filter((entity) => system.requiredComponents.every((type) => entity.hasComponent(type)));
+      const startedAt = Date.now();
       system.update({
         deltaTime,
         elapsedTime: this.elapsedTime,
         engine: this,
-        entities
+        entities: scopedEntities
       });
+      const durationMs = Math.max(0, Date.now() - startedAt);
+      const metric = this.systemMetrics.get(system.id);
+      if (!metric) {
+        this.systemMetrics.set(system.id, {
+          systemId: system.id,
+          stage: system.stage,
+          priority: system.priority,
+          ticks: 1,
+          lastDurationMs: durationMs,
+          avgDurationMs: durationMs,
+          totalDurationMs: durationMs
+        });
+        continue;
+      }
+      metric.ticks += 1;
+      metric.lastDurationMs = durationMs;
+      metric.totalDurationMs += durationMs;
+      metric.avgDurationMs = metric.totalDurationMs / metric.ticks;
     }
   }
 
@@ -112,6 +158,13 @@ export class Engine {
       return this.getEntities();
     }
     return this.getEntities().filter((entity) => types.every((type) => entity.hasComponent(type)));
+  }
+
+  getSystemMetrics(): EngineSystemMetric[] {
+    return this.systems
+      .map((system) => this.systemMetrics.get(system.id))
+      .filter((metric): metric is EngineSystemMetric => Boolean(metric))
+      .map((metric) => ({ ...metric }));
   }
 
   getComponent<T extends EngineComponent>(entityId: string, type: ComponentType): T | undefined {

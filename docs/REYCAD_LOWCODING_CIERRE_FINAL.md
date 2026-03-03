@@ -20,3 +20,11 @@
 ## Cobertura
 - `tests/unit/ai-policy-filtering.test.ts` actualizado para permitir tools de batalla en perfil full.
 - `tests/unit/reycad-commands.test.ts` incluye flujo de batalla (`setup -> play -> stop`) y verificación de `runtimeMode`.
+
+## Endurecimiento adicional (2026-03-03)
+- Fase 3 (física):
+  - sub-stepping en `PhysicsSystem` y `physicsRuntime` para deltas altos.
+  - broadphase espacial en `PhysicsWorld` para reducir pares de colisión candidatos.
+- Fase 4 (ECS):
+  - filtro por `requiredComponents` en cada sistema.
+  - métricas por sistema en `Engine` (`ticks`, `lastDurationMs`, `avgDurationMs`, `totalDurationMs`).

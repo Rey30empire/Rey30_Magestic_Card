@@ -9,6 +9,7 @@ export type PhysicsWorldOptions = {
   backend?: PhysicsBackendMode;
   gravity?: Vec3;
   floorY?: number;
+  broadphaseCellSize?: number;
 };
 
 export type PhysicsRaycastHit = {
@@ -52,6 +53,22 @@ function cloneVec3(value: Vec3): Vec3 {
 
 function keyPair(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function splitPair(pair: string): [string, string] {
+  const separator = pair.indexOf("|");
+  if (separator < 0) {
+    return [pair, pair];
+  }
+  return [pair.slice(0, separator), pair.slice(separator + 1)];
+}
+
+function cellCoord(value: number, cellSize: number): number {
+  return Math.floor(value / cellSize);
+}
+
+function cellKey(x: number, y: number, z: number): string {
+  return `${x}|${y}|${z}`;
 }
 
 function directionNormalize(direction: Vec3): Vec3 {
@@ -124,6 +141,7 @@ export class PhysicsWorld {
   private backend: PhysicsBackend = "lite";
   private readonly gravity: Vec3;
   private readonly floorY: number;
+  private readonly broadphaseCellSize: number;
   private rapier: RapierHandle | null = null;
   private initializePromise: Promise<void> | null = null;
 
@@ -139,6 +157,8 @@ export class PhysicsWorld {
     this.desiredBackend = options.backend ?? "auto";
     this.gravity = cloneVec3(options.gravity ?? [0, -9.81, 0]);
     this.floorY = Number.isFinite(options.floorY) ? (options.floorY as number) : 0;
+    const cellSize = Number.isFinite(options.broadphaseCellSize) ? (options.broadphaseCellSize as number) : 4;
+    this.broadphaseCellSize = Math.max(0.25, cellSize);
   }
 
   async initialize(): Promise<void> {
@@ -481,6 +501,48 @@ export class PhysicsWorld {
     }
   }
 
+  private buildBroadphasePairs(aabbs: Map<string, Aabb>): Set<string> {
+    const cellToEntities = new Map<string, string[]>();
+    const cellSize = this.broadphaseCellSize;
+
+    for (const [entityId, aabb] of aabbs.entries()) {
+      const minX = cellCoord(aabb.min[0], cellSize);
+      const minY = cellCoord(aabb.min[1], cellSize);
+      const minZ = cellCoord(aabb.min[2], cellSize);
+      const maxX = cellCoord(aabb.max[0], cellSize);
+      const maxY = cellCoord(aabb.max[1], cellSize);
+      const maxZ = cellCoord(aabb.max[2], cellSize);
+
+      for (let x = minX; x <= maxX; x += 1) {
+        for (let y = minY; y <= maxY; y += 1) {
+          for (let z = minZ; z <= maxZ; z += 1) {
+            const key = cellKey(x, y, z);
+            const bucket = cellToEntities.get(key);
+            if (bucket) {
+              bucket.push(entityId);
+            } else {
+              cellToEntities.set(key, [entityId]);
+            }
+          }
+        }
+      }
+    }
+
+    const candidates = new Set<string>();
+    for (const entries of cellToEntities.values()) {
+      if (entries.length < 2) {
+        continue;
+      }
+      for (let left = 0; left < entries.length - 1; left += 1) {
+        for (let right = left + 1; right < entries.length; right += 1) {
+          candidates.add(keyPair(entries[left], entries[right]));
+        }
+      }
+    }
+
+    return candidates;
+  }
+
   private rebuildContacts(): void {
     const currentContacts = new Set<string>();
     const currentContactPoints = new Map<string, Vec3>();
@@ -496,37 +558,27 @@ export class PhysicsWorld {
       aabbs.set(entityId, computeColliderAabb(collider.descriptor, transform, body?.position));
     }
 
-    for (let left = 0; left < colliderEntries.length; left += 1) {
-      const [aId] = colliderEntries[left];
+    const candidatePairs = this.buildBroadphasePairs(aabbs);
+    for (const pairKey of candidatePairs) {
+      const [aId, bId] = splitPair(pairKey);
       const aabbA = aabbs.get(aId);
-      if (!aabbA) {
+      const aabbB = aabbs.get(bId);
+      if (!aabbA || !aabbB || !aabbIntersects(aabbA, aabbB)) {
         continue;
       }
 
-      for (let right = left + 1; right < colliderEntries.length; right += 1) {
-        const [bId] = colliderEntries[right];
-        const aabbB = aabbs.get(bId);
-        if (!aabbB) {
-          continue;
-        }
-        if (!aabbIntersects(aabbA, aabbB)) {
-          continue;
-        }
+      const pointA = aabbCenter(aabbA);
+      const pointB = aabbCenter(aabbB);
+      const point: Vec3 = [(pointA[0] + pointB[0]) / 2, (pointA[1] + pointB[1]) / 2, (pointA[2] + pointB[2]) / 2];
 
-        const pairKey = keyPair(aId, bId);
-        const pointA = aabbCenter(aabbA);
-        const pointB = aabbCenter(aabbB);
-        const point: Vec3 = [(pointA[0] + pointB[0]) / 2, (pointA[1] + pointB[1]) / 2, (pointA[2] + pointB[2]) / 2];
-
-        this.events.push({
-          a: aId,
-          b: bId,
-          type: this.previousContacts.has(pairKey) ? "stay" : "enter",
-          point
-        });
-        currentContacts.add(pairKey);
-        currentContactPoints.set(pairKey, point);
-      }
+      this.events.push({
+        a: aId,
+        b: bId,
+        type: this.previousContacts.has(pairKey) ? "stay" : "enter",
+        point
+      });
+      currentContacts.add(pairKey);
+      currentContactPoints.set(pairKey, point);
     }
 
     for (const pairKey of this.previousContacts) {

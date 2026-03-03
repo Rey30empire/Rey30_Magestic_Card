@@ -22,7 +22,7 @@ Fecha de corte: 2026-03-03
 - `docs/LOWCODING_PRIORIZACION_AI_FIRST_V2_2026-03-03.md`
 
 ## Resumen rapido
-- Ya hecho: base de loop, render en Three.js, fisica lite con constraints/raycast/eventos, ECS base, editor interno fuerte, materiales PBR, export STL/GLB, networking backend, y bridge AI/Python.
+- Ya hecho: base de loop, render en Three.js, fisica lite con constraints/raycast/eventos + sub-stepping + broadphase espacial, ECS base con filtro por componentes y metricas por sistema, editor interno fuerte, materiales PBR, export STL/GLB, networking backend, y bridge AI/Python.
 - Documentado para hacer: cierre de Fase 7 (paridad Unity), Fases 8-9 de producto, plataforma productiva (Postgres/Redis/ops), Asset Vault global, Play-In-Editor/Build, Mesh Edit avanzado, bridge ReyMeshy.
 - No tomado en cuenta de forma explicita en docs actuales: culling avanzado, shader manager propio, audio 3D real, networking de prediccion/reconciliacion, memory manager custom, ray tracing/GI real.
 
@@ -39,13 +39,13 @@ Fecha de corte: 2026-03-03
 - No tomado en cuenta: gestion de shaders propia, frustum/occlusion/backface culling formal, render pipeline bajo nivel (DX/Vulkan/OpenGL directo).
 
 ### Fase 3 - Fisica
-- Hecho: fisica lite con gravedad, rigid body (`dynamic/kinematic/fixed`), colliders, AABB contact events, constraints, impulse y raycast.
+- Hecho: fisica lite con gravedad, rigid body (`dynamic/kinematic/fixed`), colliders, AABB contact events, constraints, impulse, raycast, sub-stepping estable y broadphase espacial por celdas.
 - Documentado para hacer: seguir evolucionando runtime de juego y flujo arena/battle.
-- No tomado en cuenta: colision por malla robusta + broadphase/narrowphase avanzados + thread fisico separado real.
+- No tomado en cuenta: colision por malla robusta + narrowphase avanzado + thread fisico separado real.
 
 ### Fase 4 - ECS
-- Hecho: entidad ID + componentes + sistemas + stages (base ECS funcional).
-- Documentado para hacer: no hay plan detallado de scheduler ECS multithread.
+- Hecho: entidad ID + componentes + sistemas + stages, filtro por `requiredComponents` y metricas de ejecucion por sistema (ticks/duracion promedio).
+- Documentado para hacer: no hay plan detallado de scheduler ECS multithread con job graph.
 - No tomado en cuenta: paralelizacion ECS por archetypes/chunks y job graph ECS.
 
 ### Fase 5 - Asset Management

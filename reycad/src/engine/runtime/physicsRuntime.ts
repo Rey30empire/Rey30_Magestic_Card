@@ -2,6 +2,9 @@ import { PhysicsWorld, type PhysicsContactEvent, type PhysicsDistanceConstraint,
 import type { Node, NodeCollider, NodeRigidBody, Project, Transform } from "../scenegraph/types";
 import type { ColliderComponent, RigidBodyComponent, TransformComponent } from "../../engine-core/core/Component";
 
+const PHYSICS_FIXED_STEP = 1 / 60;
+const PHYSICS_MAX_SUB_STEPS = 8;
+
 type PhysicsRuntimeEvent = PhysicsContactEvent & {
   at: string;
 };
@@ -167,7 +170,11 @@ class PhysicsRuntime {
     }
 
     this.syncWorldState(project, world);
-    world.step(delta);
+    const subStepCount = Math.max(1, Math.min(PHYSICS_MAX_SUB_STEPS, Math.ceil(delta / PHYSICS_FIXED_STEP)));
+    const subStepDelta = delta / subStepCount;
+    for (let stepIndex = 0; stepIndex < subStepCount; stepIndex += 1) {
+      world.step(subStepDelta);
+    }
     const events = world.drainContactEvents();
     if (events.length > 0) {
       const at = new Date().toISOString();
