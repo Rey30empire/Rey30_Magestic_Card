@@ -26,6 +26,30 @@ export type RenderStatsSnapshot = {
   cullMargin: number;
   lodNearDistance: number;
   lodMidDistance: number;
+  cpuFrameBudgetMs: number;
+  cpuFrameUsedMs: number;
+  cpuFrameRemainingMs: number;
+  cpuPressure: number;
+  gpuPressure: number;
+  jobQueueDepth: number;
+  jobsExecuted: number;
+  jobsDeferred: number;
+  jobsDropped: number;
+  physicsBudgetMs: number;
+  physicsUsedMs: number;
+  physicsDeferred: number;
+  cullingBudgetMs: number;
+  cullingUsedMs: number;
+  cullingDeferred: number;
+  prefetchBudgetMs: number;
+  prefetchUsedMs: number;
+  prefetchDeferred: number;
+  jobSystemBudgetMs: number;
+  jobSystemUsedMs: number;
+  jobSystemDeferred: number;
+  miscBudgetMs: number;
+  miscUsedMs: number;
+  miscDeferred: number;
   updatedAt: string | null;
 };
 
@@ -54,6 +78,30 @@ const DEFAULT_RENDER_STATS: RenderStatsSnapshot = {
   cullMargin: 1.2,
   lodNearDistance: 0,
   lodMidDistance: 0,
+  cpuFrameBudgetMs: 0,
+  cpuFrameUsedMs: 0,
+  cpuFrameRemainingMs: 0,
+  cpuPressure: 0,
+  gpuPressure: 0,
+  jobQueueDepth: 0,
+  jobsExecuted: 0,
+  jobsDeferred: 0,
+  jobsDropped: 0,
+  physicsBudgetMs: 0,
+  physicsUsedMs: 0,
+  physicsDeferred: 0,
+  cullingBudgetMs: 0,
+  cullingUsedMs: 0,
+  cullingDeferred: 0,
+  prefetchBudgetMs: 0,
+  prefetchUsedMs: 0,
+  prefetchDeferred: 0,
+  jobSystemBudgetMs: 0,
+  jobSystemUsedMs: 0,
+  jobSystemDeferred: 0,
+  miscBudgetMs: 0,
+  miscUsedMs: 0,
+  miscDeferred: 0,
   updatedAt: null
 };
 
@@ -189,7 +237,31 @@ export function createQualityStore(manager: QualityManager = new QualityManager(
           current.instancingThreshold === stats.instancingThreshold &&
           current.cullMargin === stats.cullMargin &&
           current.lodNearDistance === stats.lodNearDistance &&
-          current.lodMidDistance === stats.lodMidDistance;
+          current.lodMidDistance === stats.lodMidDistance &&
+          current.cpuFrameBudgetMs === stats.cpuFrameBudgetMs &&
+          current.cpuFrameUsedMs === stats.cpuFrameUsedMs &&
+          current.cpuFrameRemainingMs === stats.cpuFrameRemainingMs &&
+          current.cpuPressure === stats.cpuPressure &&
+          current.gpuPressure === stats.gpuPressure &&
+          current.jobQueueDepth === stats.jobQueueDepth &&
+          current.jobsExecuted === stats.jobsExecuted &&
+          current.jobsDeferred === stats.jobsDeferred &&
+          current.jobsDropped === stats.jobsDropped &&
+          current.physicsBudgetMs === stats.physicsBudgetMs &&
+          current.physicsUsedMs === stats.physicsUsedMs &&
+          current.physicsDeferred === stats.physicsDeferred &&
+          current.cullingBudgetMs === stats.cullingBudgetMs &&
+          current.cullingUsedMs === stats.cullingUsedMs &&
+          current.cullingDeferred === stats.cullingDeferred &&
+          current.prefetchBudgetMs === stats.prefetchBudgetMs &&
+          current.prefetchUsedMs === stats.prefetchUsedMs &&
+          current.prefetchDeferred === stats.prefetchDeferred &&
+          current.jobSystemBudgetMs === stats.jobSystemBudgetMs &&
+          current.jobSystemUsedMs === stats.jobSystemUsedMs &&
+          current.jobSystemDeferred === stats.jobSystemDeferred &&
+          current.miscBudgetMs === stats.miscBudgetMs &&
+          current.miscUsedMs === stats.miscUsedMs &&
+          current.miscDeferred === stats.miscDeferred;
 
         const qualityUnchanged =
           state.mode === qualityState.mode &&

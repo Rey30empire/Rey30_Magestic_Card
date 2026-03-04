@@ -22,6 +22,8 @@ import { buildThreeMaterial } from "./materials";
 import { SceneLighting } from "./lighting";
 import { SceneGrid } from "./grid";
 import { runtimeAssetManager } from "../runtime/assetManager";
+import { FrameBudgetScheduler } from "../runtime/frameBudgetScheduler";
+import { RuntimeJobSystemLite } from "../runtime/jobSystemLite";
 import { applySelectionRules } from "../interaction/selection";
 import { modeFromKeyboardKey } from "../interaction/gizmo";
 import { frameBounds } from "../interaction/camera";
@@ -343,6 +345,13 @@ function maxPriority(current: HybridPrefetchPriority | undefined, next: HybridPr
   return priorityRank(next) > priorityRank(current) ? next : current;
 }
 
+function tickNowMs(): number {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
 function FramePerformanceProbe(): null {
   const ingestFrameMs = useQualityStore((state) => state.ingestFrameMs);
   useFrame((_state, delta) => {
@@ -362,6 +371,7 @@ function SceneContent(): JSX.Element {
   const updateTransformDirect = useEditorStore((state) => state.updateTransformDirect);
   const executeCommand = useEditorStore((state) => state.executeCommand);
   const addLog = useEditorStore((state) => state.addLog);
+  const tickPlaySession = useEditorStore((state) => state.tickPlaySession);
   const frameRequestIds = useEditorStore((state) => state.frameRequestIds);
   const frameRequestToken = useEditorStore((state) => state.frameRequestToken);
   const qualityProfile = useQualityStore((state) => state.profile);
@@ -505,6 +515,9 @@ function SceneContent(): JSX.Element {
     lastLogAtMs: 0
   });
   const hybridPrefetchNextAtMs = useRef(0);
+  const frameBudgetSchedulerRef = useRef(new FrameBudgetScheduler());
+  const runtimeJobSystemRef = useRef(new RuntimeJobSystemLite({ maxQueueSize: 480 }));
+  const lastGpuPressureRef = useRef(1);
 
   const instancingDummy = useRef(new Object3D());
 
@@ -554,6 +567,13 @@ function SceneContent(): JSX.Element {
     };
   }, [staticBatchGroups]);
 
+  useEffect(
+    () => () => {
+      runtimeJobSystemRef.current.clear();
+    },
+    []
+  );
+
   useEffect(() => {
     const dummy = instancingDummy.current;
     for (const group of instancedGroups) {
@@ -582,7 +602,16 @@ function SceneContent(): JSX.Element {
   }, [data.project.textures, referencedTextureAssets, setAssetStats]);
 
   useFrame((state, delta) => {
+    tickPlaySession();
+
+    const frameStartedAtMs = tickNowMs();
+    const frameBudgetScheduler = frameBudgetSchedulerRef.current;
+    const runtimeJobs = runtimeJobSystemRef.current;
+    const dynamicFrameBudgetMs = clamp(delta * 1000 * 0.94, 8.5, 24);
+    frameBudgetScheduler.beginFrame(dynamicFrameBudgetMs, lastGpuPressureRef.current);
+
     const snapshot = useEditorStore.getState().data.project;
+    const physicsStartedAtMs = tickNowMs();
     physicsRuntime.step(snapshot, delta, {
       onLog: addLog,
       onUpdateTransform: (nodeId, transform) => {
@@ -597,12 +626,14 @@ function SceneContent(): JSX.Element {
         addLog(`[physics] ${recent.type} ${recent.a}<->${recent.b}`);
       }
     }
+    const physicsDurationMs = tickNowMs() - physicsStartedAtMs;
+    frameBudgetScheduler.recordUsage("physics", physicsDurationMs);
 
     camera.updateMatrixWorld();
     cullProjection.current.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     cullFrustum.current.setFromProjectionMatrix(cullProjection.current);
 
-    const nowMs = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+    const nowMs = tickNowMs();
     let cameraSpeed = 0;
     if (hasPreviousCameraPosition.current) {
       const moved = previousCameraPosition.current.distanceTo(camera.position);
@@ -617,63 +648,80 @@ function SceneContent(): JSX.Element {
     const lodDistances = sceneRuntimeProfile.lodDistances;
     const budgetTargets = resolveSceneBudgetTargets(sceneRuntimeProfile.sceneProfile, effectiveLevel, sceneRuntimeProfile.sceneNodeCount);
 
+    let prefetchPlanningMs = 0;
     if (nowMs >= hybridPrefetchNextAtMs.current) {
-      const hybridRequestsByTextureId = new Map<string, { asset: TextureAsset; priority: HybridPrefetchPriority }>();
-      const selectedNodeIds = new Set(selection);
+      const prefetchStartedAtMs = tickNowMs();
+      const prefetchReservation = frameBudgetScheduler.reserve("prefetch", 0.32);
+      if (prefetchReservation.granted) {
+        const hybridRequestsByTextureId = new Map<string, { asset: TextureAsset; priority: HybridPrefetchPriority }>();
+        const selectedNodeIds = new Set(selection);
 
-      for (const selected of selectedTextureAssets) {
-        hybridRequestsByTextureId.set(selected.id, {
-          asset: selected.asset,
-          priority: "critical"
-        });
-      }
-
-      const nearDistance = lodDistances.near * (1.5 + clamp(cameraSpeed * 0.004, 0, 1.4));
-      const midDistance = lodDistances.mid * (1.2 + clamp(cameraSpeed * 0.003, 0, 1.6));
-      const farDistance = lodDistances.mid * (2.1 + clamp(cameraSpeed * 0.0035, 0, 2.4));
-
-      for (const candidate of texturePrefetchCandidates) {
-        const dx = candidate.position[0] - camera.position.x;
-        const dy = candidate.position[1] - camera.position.y;
-        const dz = candidate.position[2] - camera.position.z;
-        const distance = Math.hypot(dx, dy, dz);
-
-        let priority: HybridPrefetchPriority | null = null;
-        if (selectedNodeIds.has(candidate.nodeId)) {
-          priority = "critical";
-        } else if (hoveredNodeId && candidate.nodeId === hoveredNodeId) {
-          priority = "high";
-        } else if (distance <= nearDistance) {
-          priority = "high";
-        } else if (distance <= midDistance) {
-          priority = "normal";
-        } else if (
-          distance <= farDistance &&
-          (cameraSpeed > 25 || sceneRuntimeProfile.sceneProfile !== "indoor")
-        ) {
-          priority = "low";
+        for (const selected of selectedTextureAssets) {
+          hybridRequestsByTextureId.set(selected.id, {
+            asset: selected.asset,
+            priority: "critical"
+          });
         }
 
-        if (!priority) {
-          continue;
+        const nearDistance = lodDistances.near * (1.5 + clamp(cameraSpeed * 0.004, 0, 1.4));
+        const midDistance = lodDistances.mid * (1.2 + clamp(cameraSpeed * 0.003, 0, 1.6));
+        const farDistance = lodDistances.mid * (2.1 + clamp(cameraSpeed * 0.0035, 0, 2.4));
+
+        for (const candidate of texturePrefetchCandidates) {
+          const dx = candidate.position[0] - camera.position.x;
+          const dy = candidate.position[1] - camera.position.y;
+          const dz = candidate.position[2] - camera.position.z;
+          const distance = Math.hypot(dx, dy, dz);
+
+          let priority: HybridPrefetchPriority | null = null;
+          if (selectedNodeIds.has(candidate.nodeId)) {
+            priority = "critical";
+          } else if (hoveredNodeId && candidate.nodeId === hoveredNodeId) {
+            priority = "high";
+          } else if (distance <= nearDistance) {
+            priority = "high";
+          } else if (distance <= midDistance) {
+            priority = "normal";
+          } else if (
+            distance <= farDistance &&
+            (cameraSpeed > 25 || sceneRuntimeProfile.sceneProfile !== "indoor")
+          ) {
+            priority = "low";
+          }
+
+          if (!priority) {
+            continue;
+          }
+
+          for (const asset of candidate.assets) {
+            const existing = hybridRequestsByTextureId.get(asset.id);
+            hybridRequestsByTextureId.set(asset.id, {
+              asset,
+              priority: maxPriority(existing?.priority, priority)
+            });
+          }
         }
 
-        for (const asset of candidate.assets) {
-          const existing = hybridRequestsByTextureId.get(asset.id);
-          hybridRequestsByTextureId.set(asset.id, {
-            asset,
-            priority: maxPriority(existing?.priority, priority)
+        if (hybridRequestsByTextureId.size > 0) {
+          const requests = [...hybridRequestsByTextureId.values()];
+          runtimeJobs.enqueue({
+            id: "prefetch:texture-hybrid",
+            subsystem: "prefetch",
+            priority: selectedTextureAssets.length > 0 ? "critical" : "normal",
+            estimatedMs: Math.min(3.2, 0.2 + requests.length * 0.015),
+            run: () => {
+              runtimeAssetManager.prefetchTextureRequests(requests);
+            }
           });
         }
       }
-
-      if (hybridRequestsByTextureId.size > 0) {
-        runtimeAssetManager.prefetchTextureRequests([...hybridRequestsByTextureId.values()]);
-      }
       const nextIntervalMs = cameraSpeed > 120 ? 120 : cameraSpeed > 45 ? 180 : 260;
       hybridPrefetchNextAtMs.current = nowMs + nextIntervalMs;
+      prefetchPlanningMs = tickNowMs() - prefetchStartedAtMs;
+      frameBudgetScheduler.recordUsage("prefetch", prefetchPlanningMs);
     }
 
+    const cullingStartedAtMs = tickNowMs();
     let visibleMeshes = csgMeshes.length;
     let culledMeshes = 0;
     let visibleInstancedGroups = 0;
@@ -815,8 +863,12 @@ function SceneContent(): JSX.Element {
       visibleMeshes += group.itemCount;
       lodUsage[group.lodLevel] += group.itemCount;
     }
+    const cullingDurationMs = tickNowMs() - cullingStartedAtMs;
+    frameBudgetScheduler.recordUsage("culling", cullingDurationMs);
 
     const budgetUsage = evaluateSceneBudgetUsage(state.gl.info.render.calls, state.gl.info.render.triangles, budgetTargets);
+    const gpuPressure = Number(Math.max(budgetUsage.drawCallUsage, budgetUsage.triangleUsage).toFixed(3));
+    lastGpuPressureRef.current = gpuPressure;
     const previousBudget = budgetAlertState.current;
     const shouldLogTransition = previousBudget.level !== budgetUsage.alert;
     const shouldLogPulse = budgetUsage.alert !== "ok" && nowMs - previousBudget.lastLogAtMs >= 5000;
@@ -832,6 +884,33 @@ function SceneContent(): JSX.Element {
         lastLogAtMs: nowMs
       };
     }
+
+    const jobsReservation = frameBudgetScheduler.reserve("jobs", 0.22);
+    let jobsExecuted = 0;
+    let jobsDeferred = 0;
+    let jobsDropped = 0;
+    let jobRuntimeDurationMs = 0;
+    if (jobsReservation.granted && jobsReservation.allowanceMs > 0.02) {
+      const jobSummary = runtimeJobs.drain(jobsReservation.allowanceMs);
+      frameBudgetScheduler.recordUsage("jobs", jobSummary.durationMs);
+      jobRuntimeDurationMs = jobSummary.durationMs;
+      jobsExecuted = jobSummary.executed;
+      jobsDeferred = jobSummary.deferred;
+      jobsDropped = jobSummary.dropped;
+      if (jobSummary.deferred > 0) {
+        frameBudgetScheduler.markDeferred("jobs", 1);
+      }
+    } else {
+      const pending = runtimeJobs.getSnapshot();
+      jobsDeferred = pending.queueDepth;
+      jobsDropped = pending.droppedPending;
+    }
+
+    const measuredWithoutMiscMs = tickNowMs() - frameStartedAtMs;
+    const miscDurationMs = Math.max(0, measuredWithoutMiscMs - (physicsDurationMs + cullingDurationMs + prefetchPlanningMs + jobRuntimeDurationMs));
+    frameBudgetScheduler.recordUsage("misc", miscDurationMs);
+    const frameBudgetSummary = frameBudgetScheduler.getSnapshot();
+    const jobSnapshot = runtimeJobs.getSnapshot();
 
     setRenderStats({
       drawCalls: state.gl.info.render.calls,
@@ -857,7 +936,31 @@ function SceneContent(): JSX.Element {
       instancingThreshold: sceneRuntimeProfile.instancingThreshold,
       cullMargin: dynamicCullMargin,
       lodNearDistance: lodDistances.near,
-      lodMidDistance: lodDistances.mid
+      lodMidDistance: lodDistances.mid,
+      cpuFrameBudgetMs: frameBudgetSummary.frameBudgetMs,
+      cpuFrameUsedMs: frameBudgetSummary.frameUsedMs,
+      cpuFrameRemainingMs: frameBudgetSummary.frameRemainingMs,
+      cpuPressure: frameBudgetSummary.cpuPressure,
+      gpuPressure,
+      jobQueueDepth: jobSnapshot.queueDepth,
+      jobsExecuted,
+      jobsDeferred,
+      jobsDropped,
+      physicsBudgetMs: frameBudgetSummary.subsystems.physics.budgetMs,
+      physicsUsedMs: frameBudgetSummary.subsystems.physics.usedMs,
+      physicsDeferred: frameBudgetSummary.subsystems.physics.deferred,
+      cullingBudgetMs: frameBudgetSummary.subsystems.culling.budgetMs,
+      cullingUsedMs: frameBudgetSummary.subsystems.culling.usedMs,
+      cullingDeferred: frameBudgetSummary.subsystems.culling.deferred,
+      prefetchBudgetMs: frameBudgetSummary.subsystems.prefetch.budgetMs,
+      prefetchUsedMs: frameBudgetSummary.subsystems.prefetch.usedMs,
+      prefetchDeferred: frameBudgetSummary.subsystems.prefetch.deferred,
+      jobSystemBudgetMs: frameBudgetSummary.subsystems.jobs.budgetMs,
+      jobSystemUsedMs: frameBudgetSummary.subsystems.jobs.usedMs,
+      jobSystemDeferred: frameBudgetSummary.subsystems.jobs.deferred,
+      miscBudgetMs: frameBudgetSummary.subsystems.misc.budgetMs,
+      miscUsedMs: frameBudgetSummary.subsystems.misc.usedMs,
+      miscDeferred: frameBudgetSummary.subsystems.misc.deferred
     });
     setAssetStats(runtimeAssetManager.getSnapshot());
   });

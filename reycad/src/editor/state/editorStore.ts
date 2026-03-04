@@ -6,9 +6,11 @@ import type { Command } from "../commands/types";
 import { createEmptyAiHistory } from "./types";
 import type { EditorAiHistory, EditorData } from "./types";
 import { saveProjectAutosave } from "../persistence/storage";
+import { PlaySessionManager, type PlayStopReason, type PlaySessionState } from "../runtime/playSessionManager";
 
 type EditorStore = {
   data: EditorData;
+  play: PlaySessionState & { lastStopReason: PlayStopReason | null };
   toolMode: GizmoMode;
   hoveredNodeId: string | null;
   frameRequestIds: string[];
@@ -29,6 +31,11 @@ type EditorStore = {
   updateTransformDirect: (nodeId: string, transform: Transform) => void;
   addLog: (message: string) => void;
   loadProject: (project: Project, aiHistory?: EditorAiHistory) => void;
+  startPlaySession: (maxDurationMs?: number) => boolean;
+  stopPlaySession: (reason?: PlayStopReason) => boolean;
+  panicStopPlaySession: () => boolean;
+  hardResetPlaySession: () => boolean;
+  tickPlaySession: () => void;
 };
 
 function defaultData(): EditorData {
@@ -46,8 +53,25 @@ function persistAutosave(data: EditorData): void {
   });
 }
 
+function isDestructiveEditorCommand(command: Command): boolean {
+  const name = command.name.trim().toLowerCase();
+  return (
+    name.startsWith("delete ") ||
+    name.startsWith("group ") ||
+    name === "ungroup" ||
+    name.startsWith("add boolean") ||
+    name.startsWith("remove boolean")
+  );
+}
+
+const playSessionManager = new PlaySessionManager();
+
 export const useEditorStore = create<EditorStore>((set, get) => ({
   data: defaultData(),
+  play: {
+    ...playSessionManager.getState(),
+    lastStopReason: null
+  },
   toolMode: "translate",
   hoveredNodeId: null,
   frameRequestIds: [],
@@ -56,6 +80,21 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   redoStack: [],
   executeCommand: (command) => {
     const state = get();
+    if (state.play.isPlaying && isDestructiveEditorCommand(command)) {
+      const blockedCommands = playSessionManager.incrementBlockedCommands();
+      set((current) => ({
+        data: {
+          ...current.data,
+          logs: [...current.data.logs, `[play] blocked command ${command.name} (not allowed while Play is active)`]
+        },
+        play: {
+          ...current.play,
+          blockedCommands
+        }
+      }));
+      return;
+    }
+
     const nextData = command.do(state.data);
     persistAutosave(nextData);
     set({
@@ -212,14 +251,92 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       }
     })),
   loadProject: (project, aiHistory) =>
-    set(() => ({
-      data: {
-        project,
-        selection: [],
-        logs: ["Project loaded"],
-        aiHistory: aiHistory ?? createEmptyAiHistory()
+    set(() => {
+      playSessionManager.reset();
+      return {
+        data: {
+          project,
+          selection: [],
+          logs: ["Project loaded"],
+          aiHistory: aiHistory ?? createEmptyAiHistory()
+        },
+        play: {
+          ...playSessionManager.getState(),
+          lastStopReason: "project_reload"
+        },
+        undoStack: [],
+        redoStack: []
+      };
+    }),
+  startPlaySession: (maxDurationMs) => {
+    const state = get();
+    const started = playSessionManager.start(state.data, maxDurationMs);
+    if (!started) {
+      return false;
+    }
+    set({
+      data: started.playData,
+      play: {
+        ...playSessionManager.getState(),
+        lastStopReason: null
       },
-      undoStack: [],
-      redoStack: []
-    }))
+      hoveredNodeId: null,
+      frameRequestIds: [],
+      frameRequestToken: state.frameRequestToken + 1
+    });
+    return true;
+  },
+  stopPlaySession: (reason = "user_stop") => {
+    const stopped = playSessionManager.stop(reason);
+    if (!stopped) {
+      return false;
+    }
+    persistAutosave(stopped.restoredData);
+    set((state) => ({
+      data: stopped.restoredData,
+      play: {
+        ...playSessionManager.getState(),
+        lastStopReason: reason
+      },
+      hoveredNodeId: null,
+      frameRequestIds: [],
+      frameRequestToken: state.frameRequestToken + 1
+    }));
+    return true;
+  },
+  panicStopPlaySession: () => get().stopPlaySession("panic"),
+  hardResetPlaySession: () => {
+    const resetData = playSessionManager.hardResetScene();
+    if (!resetData) {
+      return false;
+    }
+    set((state) => ({
+      data: resetData,
+      play: {
+        ...playSessionManager.getState(),
+        lastStopReason: null
+      },
+      hoveredNodeId: null,
+      frameRequestIds: [],
+      frameRequestToken: state.frameRequestToken + 1
+    }));
+    return true;
+  },
+  tickPlaySession: () => {
+    const state = get();
+    if (!state.play.isPlaying) {
+      return;
+    }
+    const tick = playSessionManager.tick();
+    if (tick.shouldAutoStop) {
+      get().stopPlaySession("max_duration");
+      return;
+    }
+    set((current) => ({
+      play: {
+        ...current.play,
+        elapsedMs: tick.elapsedMs
+      }
+    }));
+  }
 }));

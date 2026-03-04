@@ -6,6 +6,13 @@ import engineApi from "../../engine/api/engineApi";
 const qualityModes = ["auto", "ultra", "high", "medium", "low"] as const;
 const REYMESHY_PREF_KEY = "app.reymeshy.enabled";
 
+function formatElapsedMs(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function loadReyMeshyEnabledPreference(): boolean {
   const raw = localStorage.getItem(REYMESHY_PREF_KEY);
   if (raw === null) {
@@ -33,6 +40,7 @@ export default function PerformancePanel(): JSX.Element {
   const nodes = useEditorStore((state) => state.data.project.nodes);
   const rootId = useEditorStore((state) => state.data.project.rootId);
   const selection = useEditorStore((state) => state.data.selection);
+  const play = useEditorStore((state) => state.play);
   const [constraintDraft, setConstraintDraft] = useState<{
     aId: string;
     bId: string;
@@ -53,6 +61,8 @@ export default function PerformancePanel(): JSX.Element {
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState("Sin benchmark generado.");
   const budgetClass = renderStats.budgetAlert === "ok" ? "ok" : renderStats.budgetAlert === "warn" ? "warn" : "bad";
+  const cpuPressureClass = renderStats.cpuPressure < 0.85 ? "ok" : renderStats.cpuPressure < 1 ? "warn" : "bad";
+  const gpuPressureClass = renderStats.gpuPressure < 0.85 ? "ok" : renderStats.gpuPressure < 1 ? "warn" : "bad";
 
   const bodyNodes = useMemo(
     () =>
@@ -158,6 +168,22 @@ export default function PerformancePanel(): JSX.Element {
       </div>
 
       <div className="perm-card stack-xs">
+        <div className="panel-head">
+          <h4>Play Session</h4>
+          <span className={`pill ${play.isPlaying ? "warn" : play.lastStopReason === "panic" ? "bad" : "ok"}`}>
+            {play.isPlaying ? "active" : "idle"}
+          </span>
+        </div>
+        <span className="mono">elapsed: {formatElapsedMs(play.elapsedMs)}</span>
+        <span className="mono">session: {play.sessionId ?? "none"}</span>
+        <span className="mono">blocked actions: {play.blockedCommands}</span>
+        <span className="mono">last stop: {play.lastStopReason ?? "n/a"}</span>
+        <span className="mono">fps: {fps.toFixed(2)}</span>
+        <span className="mono">cpu pressure: {(renderStats.cpuPressure * 100).toFixed(1)}%</span>
+        <span className="mono">gpu pressure: {(renderStats.gpuPressure * 100).toFixed(1)}%</span>
+      </div>
+
+      <div className="perm-card stack-xs">
         <span className="mono">effective: {effectiveLevel}</span>
         <span className="mono">fps: {fps.toFixed(2)}</span>
         <span className="mono">frame: {frameMs.toFixed(2)} ms</span>
@@ -170,11 +196,35 @@ export default function PerformancePanel(): JSX.Element {
         <span className="mono">draw calls: {renderStats.drawCalls}</span>
         <span className="mono">triangles: {renderStats.triangles}</span>
         <span className={`pill ${budgetClass}`}>budget {renderStats.budgetAlert}</span>
+        <span className={`pill ${cpuPressureClass}`}>cpu {(renderStats.cpuPressure * 100).toFixed(1)}%</span>
+        <span className={`pill ${gpuPressureClass}`}>gpu {(renderStats.gpuPressure * 100).toFixed(1)}%</span>
         <span className="mono">
           budget draw calls: {renderStats.drawCalls}/{renderStats.budgetDrawCallsTarget} ({(renderStats.budgetDrawCallUsage * 100).toFixed(1)}%)
         </span>
         <span className="mono">
           budget triangles: {renderStats.triangles}/{renderStats.budgetTrianglesTarget} ({(renderStats.budgetTriangleUsage * 100).toFixed(1)}%)
+        </span>
+        <span className="mono">
+          cpu frame used/budget: {renderStats.cpuFrameUsedMs.toFixed(2)} / {renderStats.cpuFrameBudgetMs.toFixed(2)} ms
+        </span>
+        <span className="mono">cpu frame remaining: {renderStats.cpuFrameRemainingMs.toFixed(2)} ms</span>
+        <span className="mono">
+          jobs queue/executed/deferred/dropped: {renderStats.jobQueueDepth}/{renderStats.jobsExecuted}/{renderStats.jobsDeferred}/{renderStats.jobsDropped}
+        </span>
+        <span className="mono">
+          physics cpu: {renderStats.physicsUsedMs.toFixed(2)}/{renderStats.physicsBudgetMs.toFixed(2)} ms (deferred {renderStats.physicsDeferred})
+        </span>
+        <span className="mono">
+          culling cpu: {renderStats.cullingUsedMs.toFixed(2)}/{renderStats.cullingBudgetMs.toFixed(2)} ms (deferred {renderStats.cullingDeferred})
+        </span>
+        <span className="mono">
+          prefetch cpu: {renderStats.prefetchUsedMs.toFixed(2)}/{renderStats.prefetchBudgetMs.toFixed(2)} ms (deferred {renderStats.prefetchDeferred})
+        </span>
+        <span className="mono">
+          jobs cpu: {renderStats.jobSystemUsedMs.toFixed(2)}/{renderStats.jobSystemBudgetMs.toFixed(2)} ms (deferred {renderStats.jobSystemDeferred})
+        </span>
+        <span className="mono">
+          misc cpu: {renderStats.miscUsedMs.toFixed(2)}/{renderStats.miscBudgetMs.toFixed(2)} ms (deferred {renderStats.miscDeferred})
         </span>
         <span className="mono">lines: {renderStats.lines}</span>
         <span className="mono">points: {renderStats.points}</span>

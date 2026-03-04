@@ -16,6 +16,7 @@ import { useEditorStore } from "../editor/state/editorStore";
 import engineApi from "../engine/api/engineApi";
 
 const LAYOUT_KEY = "reycad.layout.v5";
+const DEFAULT_PLAY_SESSION_MS = 10 * 60 * 1000;
 
 const panelComponents = {
   canvas: () => <Canvas3D />,
@@ -242,6 +243,16 @@ export default function AppShell(): JSX.Element {
   const apiRef = useRef<DockviewReadyEvent | null>(null);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
+  const isPlaying = useEditorStore((state) => state.play.isPlaying);
+  const playSessionId = useEditorStore((state) => state.play.sessionId);
+  const playBlockedCommands = useEditorStore((state) => state.play.blockedCommands);
+  const lastStopReason = useEditorStore((state) => state.play.lastStopReason);
+  const startPlaySession = useEditorStore((state) => state.startPlaySession);
+  const stopPlaySession = useEditorStore((state) => state.stopPlaySession);
+  const panicStopPlaySession = useEditorStore((state) => state.panicStopPlaySession);
+  const hardResetPlaySession = useEditorStore((state) => state.hardResetPlaySession);
+  const playPillClass = isPlaying ? "warn" : lastStopReason === "panic" ? "bad" : "ok";
+  const playReasonLabel = isPlaying ? "playing" : lastStopReason ?? "idle";
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
     apiRef.current = event;
@@ -275,6 +286,7 @@ export default function AppShell(): JSX.Element {
       <div className="toolbar">
         <button
           className="btn"
+          disabled={isPlaying}
           onClick={() => {
             if (window.history.length > 1) {
               window.history.back();
@@ -286,12 +298,28 @@ export default function AppShell(): JSX.Element {
         >
           ← Back
         </button>
-        <button className="btn" onClick={() => undo()} type="button">
+        <button className="btn" disabled={isPlaying} onClick={() => undo()} type="button">
           ↶ Undo
         </button>
-        <button className="btn" onClick={() => redo()} type="button">
+        <button className="btn" disabled={isPlaying} onClick={() => redo()} type="button">
           ↷ Redo
         </button>
+        <strong>PIE</strong>
+        <button className="btn btn-primary" disabled={isPlaying} onClick={() => startPlaySession(DEFAULT_PLAY_SESSION_MS)} type="button">
+          ▶ Play
+        </button>
+        <button className="btn" disabled={!isPlaying} onClick={() => stopPlaySession("user_stop")} type="button">
+          ■ Stop
+        </button>
+        <button className="btn btn-danger" disabled={!isPlaying} onClick={() => panicStopPlaySession()} type="button">
+          Panic
+        </button>
+        <button className="btn" disabled={!isPlaying} onClick={() => hardResetPlaySession()} type="button">
+          Hard Reset
+        </button>
+        <span className={`pill ${playPillClass}`}>{playReasonLabel}</span>
+        {playSessionId && <span className="mono">session {playSessionId}</span>}
+        {playBlockedCommands > 0 && <span className="warning">blocked actions: {playBlockedCommands}</span>}
         <strong>ReyCAD Presets</strong>
         <button className="btn" onClick={() => apiRef.current && seedModelingLayout(apiRef.current)} type="button">
           Modeling
@@ -309,16 +337,16 @@ export default function AppShell(): JSX.Element {
           Reset Layout
         </button>
         <strong>Quick Tools</strong>
-        <button className="btn" onClick={() => engineApi.createPrimitive("box")} type="button">
+        <button className="btn" disabled={isPlaying} onClick={() => engineApi.createPrimitive("box")} type="button">
           + Box
         </button>
-        <button className="btn" onClick={() => engineApi.createPrimitive("cylinder")} type="button">
+        <button className="btn" disabled={isPlaying} onClick={() => engineApi.createPrimitive("cylinder")} type="button">
           + Cylinder
         </button>
-        <button className="btn" onClick={() => engineApi.createPrimitive("text")} type="button">
+        <button className="btn" disabled={isPlaying} onClick={() => engineApi.createPrimitive("text")} type="button">
           + Text
         </button>
-        <button className="btn" onClick={() => engineApi.createPrimitive("terrain")} type="button">
+        <button className="btn" disabled={isPlaying} onClick={() => engineApi.createPrimitive("terrain")} type="button">
           + Terrain
         </button>
       </div>

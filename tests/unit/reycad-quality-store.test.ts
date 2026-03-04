@@ -28,7 +28,31 @@ function createRenderStats(alert: "ok" | "warn" | "critical"): RenderStatsInput 
     instancingThreshold: 4,
     cullMargin: 1.34,
     lodNearDistance: 58,
-    lodMidDistance: 176
+    lodMidDistance: 176,
+    cpuFrameBudgetMs: 16.2,
+    cpuFrameUsedMs: 8.4,
+    cpuFrameRemainingMs: 7.8,
+    cpuPressure: 0.519,
+    gpuPressure: 1.08,
+    jobQueueDepth: 2,
+    jobsExecuted: 3,
+    jobsDeferred: 2,
+    jobsDropped: 0,
+    physicsBudgetMs: 4.8,
+    physicsUsedMs: 1.7,
+    physicsDeferred: 0,
+    cullingBudgetMs: 4.2,
+    cullingUsedMs: 2.3,
+    cullingDeferred: 0,
+    prefetchBudgetMs: 1.3,
+    prefetchUsedMs: 0.4,
+    prefetchDeferred: 0,
+    jobSystemBudgetMs: 3.1,
+    jobSystemUsedMs: 1.2,
+    jobSystemDeferred: 1,
+    miscBudgetMs: 1.1,
+    miscUsedMs: 0.6,
+    miscDeferred: 0
   };
 }
 

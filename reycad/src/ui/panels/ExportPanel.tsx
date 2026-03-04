@@ -2,6 +2,7 @@ import { useState } from "react";
 import engineApi from "../../engine/api/engineApi";
 import { evaluateProject } from "../../engine/scenegraph/evaluator";
 import { useEditorStore } from "../../editor/state/editorStore";
+import { buildPlaySessionPackage } from "../../editor/runtime/playSessionExport";
 
 function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
@@ -38,6 +39,21 @@ export default function ExportPanel(): JSX.Element {
     }
   }
 
+  function exportPlaySession() {
+    setBusy(true);
+    try {
+      const bundle = buildPlaySessionPackage(project, {
+        preset: "editor-live",
+        source: "editor-ui",
+        projectFileName: "reycad-play-scene.project.json"
+      });
+      downloadBlob(new Blob([JSON.stringify(bundle.manifest, null, 2)], { type: "application/json" }), "reycad-play-session.manifest.json");
+      downloadBlob(new Blob([JSON.stringify(bundle.project, null, 2)], { type: "application/json" }), "reycad-play-scene.project.json");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="panel stack-sm">
       <h3>Export</h3>
@@ -50,6 +66,9 @@ export default function ExportPanel(): JSX.Element {
         </button>
         <button className="btn btn-primary" disabled={busy} onClick={() => void exportGlb()} type="button">
           Export GLB
+        </button>
+        <button className="btn" disabled={busy} onClick={() => exportPlaySession()} type="button">
+          Export Play Session
         </button>
       </div>
       {evalResult.warnings.length > 0 && (

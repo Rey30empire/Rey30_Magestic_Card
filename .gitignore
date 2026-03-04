@@ -8,6 +8,7 @@ dist/
 *.pfx
 *.kdbx
 data/
+artifacts/
 npm-debug.log*
 .smoke-*.log
 .app*.log
